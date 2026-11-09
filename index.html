@@ -966,9 +966,8 @@ const COMPOSICAO = { "homomeric protein": "Proteína homomérica", "heteromeric 
   "protein/NA": "Proteína e ácido nucleico", "nucleic acid (only)": "Só ácido nucleico", "protein/oligosaccharide": "Proteína e oligossacarídeo", "other": "Outra" };
 const dataBR = s => s ? new Date(s).toLocaleDateString("pt-BR", { timeZone: "UTC" }) : "—";
 const num = (x, c) => x == null ? "—" : Number(x).toLocaleString("pt-BR", { minimumFractionDigits: c, maximumFractionDigits: c });
-function fraseTitulo(t) {                 // muitos titulos vem em CAIXA ALTA
-  if (!t) return "";
-  return t === t.toUpperCase() ? t.charAt(0) + t.slice(1).toLowerCase() : t;
+function fraseTitulo(t) {                 // mantem o texto do PDB como esta (siglas como NMR e DNA)
+  return t || "";
 }
 
 async function mostrarInfo(id, contagem, infoP) {
