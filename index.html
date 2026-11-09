@@ -1,0 +1,927 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Contador de Resíduos</title>
+<meta name="description" content="Conta os aminoácidos de estruturas PDB, PQR, mmCIF e GRO por tipo, direto no navegador. Inclui scripts em Python, Bash, PowerShell e Tcl (VMD).">
+<style>
+:root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: bancada de laboratorio — ferramenta no topo (entrada | resultado), depois codigo, logica e validacao em coluna de leitura */
+:root {
+  --bg: #f3f6f7;
+  --surface: #ffffff;
+  --surface-2: #e9eff1;
+  --ink: #14232c;
+  --muted: #566871;
+  --line: #d3dde1;
+  --accent: #0d6574;
+  --accent-ink: #ffffff;
+  --accent-soft: #d8eaee;
+  --warn: #8f5600;
+  --warn-soft: #f6ead6;
+  --c-apolar: #b07a1c;
+  --c-arom: #8a5bb3;
+  --c-polar: #2f8a5d;
+  --c-basico: #2f6db5;
+  --c-acido: #bf4636;
+  --c-especial: #6e7c84;
+  --code-bg: #f7f9fa;
+  --hl-kw: #8a3b8f;
+  --hl-str: #2c7a4a;
+  --hl-com: #78878f;
+  --hl-num: #a0530c;
+  --hl-fn: #0d6574;
+  --f-display: "IBM Plex Sans Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --r: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f171b; --surface: #16232a; --surface-2: #1d2d35; --ink: #e3ecef; --muted: #98aab2;
+    --line: #2a3d46; --accent: #5cc3d3; --accent-ink: #062228; --accent-soft: #173a42;
+    --warn: #e7b25c; --warn-soft: #3a2c14;
+    --c-apolar: #dcaa4c; --c-arom: #b896dc; --c-polar: #5fc28f; --c-basico: #6fa6e8; --c-acido: #ec806f; --c-especial: #9aa9b1;
+    --code-bg: #111c21; --hl-kw: #d394dc; --hl-str: #8fd3a5; --hl-com: #7c8f98; --hl-num: #f0b26b; --hl-fn: #6fd0de;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f171b; --surface: #16232a; --surface-2: #1d2d35; --ink: #e3ecef; --muted: #98aab2;
+  --line: #2a3d46; --accent: #5cc3d3; --accent-ink: #062228; --accent-soft: #173a42;
+  --warn: #e7b25c; --warn-soft: #3a2c14;
+  --c-apolar: #dcaa4c; --c-arom: #b896dc; --c-polar: #5fc28f; --c-basico: #6fa6e8; --c-acido: #ec806f; --c-especial: #9aa9b1;
+  --code-bg: #111c21; --hl-kw: #d394dc; --hl-str: #8fd3a5; --hl-com: #7c8f98; --hl-num: #f0b26b; --hl-fn: #6fd0de;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 48px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h2 { font-size: 1.75rem; font-weight: 600; }
+h3 { font-size: 1.15rem; font-weight: 600; }
+code, kbd, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+p code, li code, td code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+
+/* cabecalho */
+header.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; padding-block: 28px 18px; border-bottom: 1px solid var(--line); }
+.marca { display: flex; flex-direction: column; gap: 6px; }
+.marca h1 { font-size: clamp(1.9rem, 4vw, 2.6rem); font-weight: 700; letter-spacing: -0.01em; }
+.marca p { margin: 0; color: var(--muted); max-width: 60ch; }
+nav.secoes { display: flex; flex-wrap: wrap; gap: 4px; }
+nav.secoes a { text-decoration: none; color: var(--ink); font-size: 0.9rem; padding: 6px 10px; border-radius: var(--r); }
+nav.secoes a:hover { background: var(--surface-2); }
+
+/* ferramenta */
+.ferramenta { display: grid; grid-template-columns: minmax(0, 330px) minmax(0, 1fr); gap: 20px; padding-block: 24px 8px; align-items: start; }
+@media (max-width: 820px) { .ferramenta { grid-template-columns: minmax(0, 1fr); } }
+.painel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+.entrada { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.soltar { border: 2px dashed var(--line); border-radius: var(--r); padding: 26px 16px; text-align: center; display: flex; flex-direction: column; gap: 10px; align-items: center; transition: border-color .15s, background .15s; }
+.soltar.ativo { border-color: var(--accent); background: var(--accent-soft); }
+.soltar svg { width: 40px; height: 40px; color: var(--accent); }
+.soltar strong { font-family: var(--f-display); font-size: 1.1rem; font-weight: 600; }
+.soltar span { color: var(--muted); font-size: 0.88rem; }
+.btn { font: inherit; font-size: 0.92rem; font-weight: 500; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover { background: var(--surface-2); }
+.btn.prim { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.prim:hover { filter: brightness(1.08); background: var(--accent); }
+.btn[disabled] { opacity: .5; cursor: default; }
+.formatos { display: flex; flex-direction: column; gap: 6px; font-size: 0.86rem; }
+.formatos .rot { font-size: 0.72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.formatos ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; }
+.formatos li { display: contents; }
+.formatos b { font-family: var(--f-mono); font-weight: 500; font-size: 0.82rem; }
+.formatos i { font-style: normal; color: var(--muted); }
+.privado { font-size: 0.82rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 12px; margin: 0; }
+.erro { background: var(--warn-soft); color: var(--warn); border-radius: var(--r); padding: 10px 12px; font-size: 0.88rem; margin: 0; }
+
+.resultado { padding: 18px; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.res-topo { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.res-nome { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.res-nome h3 { font-family: var(--f-mono); font-weight: 500; font-size: 1rem; overflow-wrap: anywhere; }
+.pill { font-size: 0.72rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
+.pill.ex { background: var(--warn-soft); color: var(--warn); }
+.pill.fmt { background: var(--accent-soft); color: var(--accent); }
+.acoes { display: flex; flex-wrap: wrap; gap: 6px; }
+.numeros { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.numeros div { background: var(--surface); padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; }
+.numeros b { font-family: var(--f-display); font-size: 1.7rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.numeros span { font-size: 0.8rem; color: var(--muted); }
+@media (max-width: 460px) { .numeros b { font-size: 1.35rem; } .numeros div { padding: 8px 10px; } }
+
+.comp-cab { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.legenda { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 0.78rem; color: var(--muted); }
+.legenda span { display: inline-flex; align-items: center; gap: 5px; }
+.legenda i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.alternar { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.alternar button { font: inherit; font-size: 0.8rem; border: 0; background: var(--surface); color: var(--muted); padding: 5px 10px; cursor: pointer; }
+.alternar button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.tabela-comp { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.tabela-comp th { text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; padding: 0 8px 6px; border-bottom: 1px solid var(--line); }
+.tabela-comp td { padding: 4px 8px; border-bottom: 1px solid var(--line); font-size: 0.9rem; white-space: nowrap; }
+.tabela-comp td.n, .tabela-comp th.n { text-align: right; }
+.tabela-comp td.tres { font-family: var(--f-mono); font-weight: 500; }
+.tabela-comp td.um { font-family: var(--f-mono); color: var(--muted); }
+.tabela-comp td.barra { width: 45%; min-width: 80px; }
+.tabela-comp tr.total td { font-weight: 600; border-bottom: 0; padding-top: 8px; }
+.trilho { height: 12px; background: var(--surface-2); border-radius: 2px; overflow: hidden; }
+.trilho i { display: block; height: 100%; border-radius: 2px; }
+.rolagem { overflow-x: auto; }
+@media (max-width: 520px) { .tabela-comp .col-classe, .tabela-comp .um { display: none; } }
+
+.bloco h4 { font-family: var(--f-display); font-size: 1rem; font-weight: 600; margin: 0 0 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-family: var(--f-mono); font-size: 0.8rem; padding: 3px 8px; border-radius: 4px; background: var(--surface-2); }
+.chip b { font-weight: 500; color: var(--accent); }
+.nota { font-size: 0.84rem; color: var(--muted); margin: 6px 0 0; }
+details.lista { margin-top: 10px; }
+details.lista summary { cursor: pointer; font-size: 0.88rem; color: var(--accent); }
+.tabela-lista { border-collapse: collapse; font-family: var(--f-mono); font-size: 0.82rem; margin-top: 8px; }
+.tabela-lista th, .tabela-lista td { padding: 2px 14px 2px 0; text-align: left; }
+.tabela-lista th { color: var(--muted); font-weight: 500; }
+.lista-caixa { max-height: 260px; overflow: auto; }
+.aviso { font-size: 0.84rem; color: var(--muted); }
+
+/* secoes de leitura */
+section.sec { padding-block: 44px 8px; display: flex; flex-direction: column; gap: 16px; }
+.sec-cab { display: flex; flex-direction: column; gap: 6px; max-width: 70ch; }
+.sec-cab p { margin: 0; color: var(--muted); }
+.texto { max-width: 70ch; display: flex; flex-direction: column; gap: 14px; }
+.texto p { margin: 0; }
+.texto ul, .texto ol { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 6px; }
+
+/* codigo */
+.abas { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--line); }
+.abas button { font: inherit; font-size: 0.92rem; border: 0; background: none; color: var(--muted); padding: 8px 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.abas button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+.codigo-cab { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.uso { font-family: var(--f-mono); font-size: 0.84rem; background: var(--surface-2); padding: 6px 10px; border-radius: var(--r); overflow-x: auto; white-space: pre; max-width: 100%; }
+.codigo-info { display: flex; flex-direction: column; gap: 6px; min-width: 0; max-width: 100%; }
+.codigo-info p { margin: 0; font-size: 0.88rem; color: var(--muted); }
+pre.fonte { margin: 0; background: var(--code-bg); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; overflow: auto; max-height: 560px; font-family: var(--f-mono); font-size: 0.8rem; line-height: 1.5; tab-size: 4; }
+pre.fonte code { font-size: inherit; background: none; padding: 0; }
+.hljs-keyword, .hljs-built_in, .hljs-literal { color: var(--hl-kw); }
+.hljs-string, .hljs-regexp { color: var(--hl-str); }
+.hljs-comment, .hljs-meta { color: var(--hl-com); font-style: italic; }
+.hljs-number { color: var(--hl-num); }
+.hljs-title, .hljs-function, .hljs-variable, .hljs-params { color: var(--hl-fn); }
+.toast { font-size: 0.84rem; color: var(--accent); min-height: 1.2em; }
+
+/* regua de colunas */
+.regua { background: var(--code-bg); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; overflow-x: auto; font-family: var(--f-mono); font-size: 0.82rem; line-height: 1.7; white-space: pre; }
+.regua .c1 { background: color-mix(in srgb, var(--c-basico) 22%, transparent); }
+.regua .c2 { background: color-mix(in srgb, var(--c-acido) 22%, transparent); }
+.regua .c3 { background: color-mix(in srgb, var(--c-polar) 25%, transparent); }
+.regua .c4 { background: color-mix(in srgb, var(--c-apolar) 28%, transparent); }
+.regua .c5 { background: color-mix(in srgb, var(--c-arom) 22%, transparent); }
+.regua .dim { color: var(--muted); }
+.regua .novo { color: var(--accent); font-weight: 500; }
+.chave-cores { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.84rem; }
+.chave-cores span { display: inline-flex; gap: 6px; align-items: center; }
+.chave-cores i { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+
+table.ref { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+table.ref th { text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+table.ref td { padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.ref td:first-child { white-space: nowrap; }
+table.ref td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.ref .mono { font-size: 0.82rem; }
+.caixa-tabela { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+.ok { color: var(--c-polar); font-weight: 600; }
+footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 0.82rem; color: var(--muted); }
+
+.busca { display: flex; flex-direction: column; gap: 6px; }
+.busca-linha { display: flex; gap: 6px; }
+.busca input { font: inherit; font-family: var(--f-mono); text-transform: uppercase; flex: 1; min-width: 0; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); color: var(--ink); }
+.busca input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.busca .nota { margin: 0; }
+.rot { font-size: 0.72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <div class="marca">
+    <h1>Contador de Resíduos</h1>
+    <p>Conta os aminoácidos de uma estrutura por tipo e lista o que não é aminoácido padrão. Aceita PDB, PQR, mmCIF e GRO, inclusive saídas de GROMACS, AMBER e CHARMM.</p>
+  </div>
+  <nav class="secoes" aria-label="Seções">
+    <a href="#contar">Contar</a>
+    <a href="#codigos">Códigos-fonte</a>
+    <a href="#logica">Lógica</a>
+    <a href="#validacao">Validação</a>
+  </nav>
+</header>
+
+<div class="ferramenta" id="contar">
+  <div class="painel entrada">
+    <div class="soltar" id="soltar">
+      <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M24 31V9m0 0-8 8m8-8 8 8"/><path d="M8 29v8a3 3 0 0 0 3 3h26a3 3 0 0 0 3-3v-8"/></svg>
+      <strong>Solte o arquivo aqui</strong>
+      <span>ou</span>
+      <label class="btn prim" for="arquivo">Escolher arquivo</label>
+      <input type="file" id="arquivo" accept=".pdb,.ent,.brk,.pdbqt,.pqr,.cif,.mmcif,.pdbx,.gro,.gz,.txt" hidden>
+    </div>
+    <form class="busca" id="busca" hidden>
+      <label for="codigo" class="rot">Ou busque pelo código PDB</label>
+      <div class="busca-linha">
+        <input id="codigo" type="text" inputmode="text" autocomplete="off" spellcheck="false" maxlength="4" placeholder="ex.: 7D9Z" aria-describedby="busca-nota">
+        <button class="btn prim" id="b-buscar" type="submit">Buscar</button>
+      </div>
+      <span class="nota" id="busca-nota">Baixa a estrutura em mmCIF direto do RCSB PDB.</span>
+    </form>
+    <p class="erro" id="erro" hidden></p>
+    <div class="formatos">
+      <span class="rot">Formatos aceitos</span>
+      <ul>
+        <li><b>PDB</b><i>.pdb .ent, inclusive GROMACS, AMBER, CHARMM</i></li>
+        <li><b>PQR</b><i>.pqr do PDB2PQR</i></li>
+        <li><b>mmCIF</b><i>.cif .mmcif do RCSB e PDBe</i></li>
+        <li><b>GRO</b><i>.gro do GROMACS</i></li>
+        <li><b>.gz</b><i>qualquer um deles compactado</i></li>
+      </ul>
+    </div>
+    <p class="privado">O arquivo é lido no seu navegador e não é enviado a lugar nenhum. Na busca por código, a página só baixa a estrutura pública do RCSB.</p>
+  </div>
+
+  <div class="painel resultado" id="resultado" aria-live="polite">
+    <div class="res-topo">
+      <div class="res-nome">
+        <h3 id="r-nome">7D9Z.pdb</h3>
+        <span class="pill fmt" id="r-fmt">PDB</span>
+        <span class="pill ex" id="r-ex">Exemplo</span>
+      </div>
+      <div class="acoes">
+        <button class="btn" id="b-copiar" type="button">Copiar relatório</button>
+        <button class="btn" id="b-txt" type="button">Salvar .txt</button>
+        <button class="btn" id="b-csv" type="button">Salvar .csv</button>
+      </div>
+    </div>
+    <p class="aviso" id="r-exnota">Resultado de exemplo para o Fab anti-basigina (PDB 7D9Z). Envie um arquivo para contar o seu.</p>
+    <div class="numeros">
+      <div><b id="r-total">0</b><span>aminoácidos</span></div>
+      <div><b id="r-naoid">0</b><span>não identificados</span></div>
+      <div><b id="r-conv">0</b><span>nomes convertidos</span></div>
+    </div>
+    <div class="comp-cab">
+      <div class="legenda" id="legenda"></div>
+      <div class="alternar" role="group" aria-label="Ordenar">
+        <button type="button" id="o-alfa" aria-pressed="true">A–Z</button>
+        <button type="button" id="o-qtd" aria-pressed="false">Quantidade</button>
+      </div>
+    </div>
+    <div class="rolagem">
+      <table class="tabela-comp">
+        <thead><tr><th>Resíduo</th><th class="um">1 letra</th><th class="col-classe">Classe</th><th class="n">Qtd.</th><th class="n">%</th><th></th></tr></thead>
+        <tbody id="r-linhas"></tbody>
+      </table>
+    </div>
+    <div class="bloco" id="r-conv-bloco" hidden>
+      <h4>Nomes convertidos</h4>
+      <div class="chips" id="r-conv-lista"></div>
+      <p class="nota">Já incluídos na contagem acima, cada um no aminoácido padrão correspondente.</p>
+    </div>
+    <div class="bloco" id="r-naoid-bloco">
+      <h4>Não identificados</h4>
+      <div class="chips" id="r-naoid-resumo"></div>
+      <p class="nota" id="r-naoid-nota"></p>
+      <details class="lista" id="r-naoid-det">
+        <summary>Ver lista com cadeia e número</summary>
+        <div class="lista-caixa"><table class="tabela-lista"><thead><tr><th>Nome</th><th>Cadeia</th><th>Número</th></tr></thead><tbody id="r-naoid-lista"></tbody></table></div>
+        <p class="nota" id="r-naoid-corte" hidden></p>
+      </details>
+    </div>
+    <div class="toast" id="toast" role="status"></div>
+  </div>
+</div>
+
+
+<section class="sec" id="codigos">
+  <div class="sec-cab">
+    <h2>Códigos-fonte</h2>
+    <p>As quatro versões seguem as mesmas regras desta página e dão o mesmo resultado. Escolha a que roda no seu ambiente.</p>
+  </div>
+  <div class="abas" role="tablist" id="abas"></div>
+  <div class="codigo-cab">
+    <div class="codigo-info">
+      <p id="c-desc"></p>
+      <div class="uso" id="c-uso"></div>
+    </div>
+    <div class="acoes">
+      <button class="btn" id="c-copiar" type="button">Copiar código</button>
+      <button class="btn" id="c-baixar" type="button">Baixar este (.zip)</button>
+      <button class="btn prim" id="c-todos" type="button">Baixar os quatro (.zip)</button>
+    </div>
+  </div>
+  <div class="toast" id="c-toast" role="status"></div>
+  <pre class="fonte"><code id="c-fonte"></code></pre>
+  <p class="nota" id="c-nota-zip" hidden>Os scripts vão dentro de um .zip porque o visualizador só permite salvar alguns tipos de arquivo; dentro dele cada um já tem a extensão certa (.py, .sh, .ps1, .tcl).</p>
+</section>
+
+<section class="sec" id="logica">
+  <div class="sec-cab">
+    <h2>Como a contagem funciona</h2>
+    <p>Primeiro a ideia, depois os detalhes de cada formato.</p>
+  </div>
+  <div class="texto">
+    <h3>A ideia</h3>
+    <p>Um arquivo de estrutura é uma lista de átomos, um por linha. Cada linha diz a que resíduo o átomo pertence: o nome do resíduo (por exemplo <code>ALA</code>), a cadeia e o número. Os átomos de um mesmo resíduo vêm sempre juntos, um depois do outro.</p>
+    <p>Por isso o programa só precisa ler as linhas em ordem e perguntar, a cada átomo: <strong>a identificação do resíduo mudou em relação à linha anterior?</strong> Se mudou, começou um resíduo novo, e ele soma 1 no tipo correspondente. Se não mudou, é mais um átomo do mesmo resíduo e é ignorado. No fim, sobra uma contagem por tipo.</p>
+    <p>É como contar quantas pessoas há numa fila de crachás em que cada pessoa carrega vários crachás iguais: basta contar quantas vezes o nome muda ao longo da fila.</p>
+  </div>
+
+  <div class="regua" aria-label="Exemplo de linhas de um PDB com as colunas usadas destacadas"><span class="dim">         1         2         3</span>
+<span class="dim">1234567890123456789012345678901234567890</span>
+ATOM   1731  N   <span class="c1">LYS </span><span class="c2">L</span><span class="c3"> 111</span><span class="c4"> </span>      5.300  -7.957  22.746   <span class="novo">← mudou: novo resíduo LYS L 111</span>
+ATOM   1732  CA  <span class="c1">LYS </span><span class="c2">L</span><span class="c3"> 111</span><span class="c4"> </span>      4.774  -9.286  22.487   <span class="dim">  igual: mesmo resíduo</span>
+<span class="dim">  ⋮     mais 20 átomos de LYS L 111 (cadeia lateral e hidrogênios)</span>
+ATOM   1753  N   <span class="c1">ARG </span><span class="c2">L</span><span class="c3"> 112</span><span class="c4"> </span>      3.151 -10.236  20.981   <span class="novo">← mudou: novo resíduo ARG L 112</span>
+ATOM   1754  CA  <span class="c1">ARG </span><span class="c2">L</span><span class="c3"> 112</span><span class="c4"> </span>      1.914 -10.317  20.222   <span class="dim">  igual: mesmo resíduo</span></div>
+  <p class="nota">Linhas reais do 7D9Z, na fronteira entre o domínio variável e o constante da cadeia leve.</p>
+  <div class="chave-cores">
+    <span><i style="background: color-mix(in srgb, var(--c-basico) 45%, transparent)"></i>colunas 18–21: nome do resíduo</span>
+    <span><i style="background: color-mix(in srgb, var(--c-acido) 45%, transparent)"></i>coluna 22: cadeia</span>
+    <span><i style="background: color-mix(in srgb, var(--c-polar) 45%, transparent)"></i>colunas 23–26: número</span>
+    <span><i style="background: color-mix(in srgb, var(--c-apolar) 50%, transparent)"></i>coluna 27: código de inserção</span>
+  </div>
+
+  <div class="texto">
+    <h3>Por que comparar com a linha anterior</h3>
+    <p>Parece mais simples juntar todas as combinações cadeia + número e contar quantas existem. Isso funciona em arquivos do PDB, mas erra em arquivos de simulação, por dois motivos:</p>
+    <ul>
+      <li><strong>Cadeia em branco.</strong> O GROMACS costuma gravar o PDB sem cadeia. Se duas cadeias começam no resíduo 1, o par "cadeia vazia + 1" aparece duas vezes e seria contado uma só. No 7D9Z gravado nesse estilo, esse método dá 215 resíduos em vez de 425.</li>
+      <li><strong>Numeração que reinicia.</strong> O campo de número tem 4 dígitos. Em sistemas grandes, com membrana e água, os programas voltam ao 0 depois do 9999 (ou usam letras, no formato hybrid-36). Números se repetem dentro da mesma cadeia.</li>
+    </ul>
+    <p>Comparando só com a linha anterior, nada disso importa: dois resíduos vizinhos sempre têm identificações diferentes. Quando existe a coluna de segmento (colunas 73–76, usada pelo CHARMM e pelo NAMD), ela entra na comparação também. Um registro <code>TER</code> força o início de um resíduo novo.</p>
+
+    <h3>Conformações alternativas</h3>
+    <p>Em cristalografia, uma cadeia lateral pode aparecer em duas posições (altloc A e B), com os átomos repetidos. Como o identificador do resíduo é o mesmo nas duas, o resíduo conta uma vez. Quando as duas posições têm nomes diferentes (microheterogeneidade, como SER/THR no mesmo número), vale o primeiro nome.</p>
+
+    <h3>Nomes de campos de força</h3>
+    <p>Programas de simulação dão nomes diferentes ao mesmo aminoácido, conforme o estado de protonação ou a ponte dissulfeto. Esses nomes são convertidos para o padrão e somados a ele, e a conversão aparece no resultado para você conferir.</p>
+  </div>
+  <div class="caixa-tabela">
+    <table class="ref">
+      <thead><tr><th>Conta como</th><th>Nomes aceitos</th><th>Origem</th></tr></thead>
+      <tbody>
+        <tr><td><code>HIS</code></td><td class="mono">HID HIE HIP HIN · HSD HSE HSP · HISD HISE HISH HISP HISA HISB HIS1 HIS2</td><td>AMBER · CHARMM · GROMACS/GROMOS</td></tr>
+        <tr><td><code>CYS</code></td><td class="mono">CYX CYM CYN · CYS2 CYSH</td><td>AMBER · GROMACS</td></tr>
+        <tr><td><code>ASP</code></td><td class="mono">ASH · ASPH · ASPP</td><td>AMBER · GROMACS · CHARMM</td></tr>
+        <tr><td><code>GLU</code></td><td class="mono">GLH · GLUH · GLUP</td><td>AMBER · GROMACS · CHARMM</td></tr>
+        <tr><td><code>LYS</code></td><td class="mono">LYN · LYSH LYSN · LSN</td><td>AMBER · GROMACS · CHARMM</td></tr>
+        <tr><td><code>ARG</code></td><td class="mono">ARGN</td><td>GROMACS</td></tr>
+        <tr><td>o aminoácido sem o prefixo</td><td class="mono">N + nome (NALA, NHIE…) · C + nome (CLYS, CSER…)</td><td>terminais do AMBER e do GROMACS</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="texto">
+    <h3>O que fica de fora da contagem</h3>
+    <ul>
+      <li><strong>Águas</strong> são ignoradas: <code>HOH WAT H2O DOD SOL TIP3 TIP4 SPC SPCE T3P OPC</code> e variantes.</li>
+      <li><strong>Não identificados</strong> são listados com nome, cadeia e número, mas não entram no total. São aminoácidos modificados (PCA, MSE, SEP…), grupos de capeamento (ACE, NME), ligantes, íons, lipídios, açúcares e nucleotídeos. Um aminoácido modificado continua fazendo parte da cadeia; se ele deve ou não entrar na sua contagem é uma decisão sua.</li>
+      <li><strong>Resíduos sem coordenadas</strong> não existem no arquivo e não são contados. Num cristal, alças flexíveis costumam faltar (o PDB lista esses resíduos no REMARK 465). Por isso a contagem pode ser menor do que a sequência da proteína.</li>
+      <li><strong>Outros modelos e quadros.</strong> Em arquivos com vários modelos (RMN) ou trajetórias, só o primeiro é lido, já que a composição é a mesma em todos.</li>
+    </ul>
+
+    <h3>Como cada formato identifica o resíduo</h3>
+  </div>
+  <div class="caixa-tabela">
+    <table class="ref">
+      <thead><tr><th>Formato</th><th>Onde estão nome, cadeia e número</th><th>Particularidades</th></tr></thead>
+      <tbody>
+        <tr><td>PDB</td><td>Colunas fixas: nome 18–21, cadeia 22, número 23–26, inserção 27, segmento 73–76</td><td>Lê nomes de 4 letras (HISE, CYS2), números de 5 dígitos do CHARMM-GUI e hybrid-36. Para no primeiro <code>ENDMDL</code>.</td></tr>
+        <tr><td>PQR</td><td>Campos separados por espaço: <code>ATOM nº átomo resíduo [cadeia] número x y z carga raio</code></td><td>A cadeia é opcional; o programa a reconhece quando o quinto campo não é um número.</td></tr>
+        <tr><td>mmCIF</td><td>Bloco <code>_atom_site</code>: <code>label_comp_id</code>, <code>auth_asym_id</code>, <code>auth_seq_id</code>, <code>pdbx_PDB_ins_code</code></td><td>Os campos são localizados pelo nome no cabeçalho do bloco, em qualquer ordem, com aspas respeitadas. Lê só o primeiro <code>pdbx_PDB_model_num</code>.</td></tr>
+        <tr><td>GRO</td><td>Colunas fixas: número 1–5, nome 6–10</td><td>Não tem cadeia; o resíduo muda quando número ou nome mudam. Lê só o primeiro quadro.</td></tr>
+        <tr><td>.gz</td><td>Descompactado antes da leitura</td><td>Reconhecido pelo conteúdo, não só pela extensão.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="texto">
+    <p>O formato é escolhido pela extensão do arquivo. Sem extensão conhecida, o programa olha o conteúdo: <code>data_</code> ou <code>_atom_site.</code> indica mmCIF, linhas <code>ATOM</code>/<code>HETATM</code> indicam PDB, e um número sozinho na segunda linha indica GRO.</p>
+    <h3>Limites</h3>
+    <ul>
+      <li>Se os átomos de um resíduo estiverem espalhados pelo arquivo, separados por outros resíduos, ele é contado mais de uma vez. Os formatos exigem átomos de um resíduo em sequência, então isso só acontece em arquivos editados à mão.</li>
+      <li>Um nome de resíduo que não está na tabela de conversões vai para os não identificados, mesmo que seja um aminoácido com nome próprio de algum programa. Basta conferir a lista.</li>
+      <li>A versão Tcl usa a separação de resíduos do próprio VMD (o atributo <code>residue</code>), então aceita qualquer formato que o VMD abra, mas não arquivos .gz.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="sec" id="validacao">
+  <div class="sec-cab">
+    <h2>Validação</h2>
+    <p>Python, Bash, PowerShell e o JavaScript desta página foram rodados nos mesmos arquivos e produziram relatórios idênticos, linha por linha. Os pares com a mesma estrutura em formatos diferentes deram o mesmo total.</p>
+  </div>
+  <div class="caixa-tabela">
+    <table class="ref">
+      <thead><tr><th>Arquivo</th><th>Formato</th><th class="n">Aminoácidos</th><th>Não identificados</th><th>Convertidos</th></tr></thead>
+      <tbody id="v-linhas"></tbody>
+    </table>
+  </div>
+  <div class="texto">
+    <p class="nota">Arquivos reais do PDB e de simulação (testes do MDAnalysis), mais casos montados para estressar a leitura: <code>gmx_teste</code> (estilo GROMACS sem cadeia, com terminais e 12 000 águas), <code>charmm_segid</code> (cadeias só no segmento), <code>hybrid36</code> e <code>wrap</code> (10 050 resíduos com numeração acima de 9999), <code>multimodelo</code> (dois modelos). Nos PDBs do banco, o total também bateu com uma contagem independente dos carbonos alfa. A versão Tcl não foi executada, porque o VMD não estava disponível no teste.</p>
+  </div>
+</section>
+
+<footer>Contador de Resíduos · regras idênticas em Python, Bash, PowerShell, Tcl (VMD) e nesta página.</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/powershell.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/tcl.min.js"></script>
+<script>
+// contador.js - mesma logica de contar_residuos.py, para o navegador
+const AMINOACIDOS = ["ALA","ARG","ASN","ASP","CYS","GLN","GLU","GLY","HIS","ILE",
+  "LEU","LYS","MET","PHE","PRO","SER","THR","TRP","TYR","VAL"];
+const SINONIMOS = {
+  HID:"HIS", HIE:"HIS", HIP:"HIS", HIN:"HIS", HSD:"HIS", HSE:"HIS", HSP:"HIS",
+  HISD:"HIS", HISE:"HIS", HISH:"HIS", HISP:"HIS", HISA:"HIS", HISB:"HIS", HIS1:"HIS", HIS2:"HIS",
+  CYX:"CYS", CYM:"CYS", CYN:"CYS", CYS2:"CYS", CYSH:"CYS",
+  ASH:"ASP", ASPH:"ASP", ASPP:"ASP", GLH:"GLU", GLUH:"GLU", GLUP:"GLU",
+  LYN:"LYS", LYSH:"LYS", LYSN:"LYS", LSN:"LYS", ARGN:"ARG"
+};
+const AGUAS = new Set(["HOH","WAT","H2O","DOD","D2O","SOL","TIP","TIP2","TIP3","TIP4","TIP5",
+  "TP3","TP4","T3P","T4P","T5P","SPC","SPCE","SWM4","OPC","OPC3"]);
+
+function padronizar(nome) {
+  if (AMINOACIDOS.includes(nome)) return nome;
+  if (Object.prototype.hasOwnProperty.call(SINONIMOS, nome)) return SINONIMOS[nome];
+  if (nome.length === 4 && (nome[0] === "N" || nome[0] === "C")) {
+    const resto = nome.slice(1);
+    if (AMINOACIDOS.includes(resto)) return resto;
+    if (Object.prototype.hasOwnProperty.call(SINONIMOS, resto)) return SINONIMOS[resto];
+  }
+  return null;
+}
+
+function detectarFormato(nomeArquivo, linhas) {
+  let nome = nomeArquivo.toLowerCase().replace(/\.gz$/, "");
+  const ponto = nome.lastIndexOf(".");
+  const ext = ponto >= 0 ? nome.slice(ponto) : "";
+  if ([".cif", ".mmcif", ".pdbx"].includes(ext)) return "mmCIF";
+  if (ext === ".gro") return "GRO";
+  if (ext === ".pqr") return "PQR";
+  if ([".pdb", ".ent", ".brk", ".pdbqt"].includes(ext)) return "PDB";
+  for (const l of linhas.slice(0, 200)) {
+    if (l.startsWith("data_") || l.startsWith("_atom_site.")) return "mmCIF";
+    if (l.startsWith("ATOM") || l.startsWith("HETATM")) return "PDB";
+  }
+  if (linhas.length > 2 && /^\d+$/.test(linhas[1].trim())) return "GRO";
+  return "PDB";
+}
+
+function lerPdb(linhas) {
+  const res = []; let anterior = null;
+  for (const l of linhas) {
+    const reg = l.slice(0, 6);
+    if (reg === "ENDMDL") break;
+    if (reg.startsWith("TER")) { anterior = null; continue; }
+    if ((reg !== "ATOM  " && reg !== "HETATM") || l.length < 22) continue;
+    const chave = l.slice(21, 27) + "|" + l.slice(72, 76);
+    if (chave === anterior) continue;
+    anterior = chave;
+    const cadeia = l.slice(21, 22).trim() || l.slice(72, 76).trim();
+    res.push([cadeia, l.slice(22, 27).trim(), l.slice(17, 21).trim().toUpperCase()]);
+  }
+  return res;
+}
+
+function lerPqr(linhas) {
+  const res = []; let anterior = null;
+  for (const l of linhas) {
+    if (l.startsWith("ENDMDL")) break;
+    if (l.startsWith("TER")) { anterior = null; continue; }
+    if (!(l.startsWith("ATOM") || l.startsWith("HETATM"))) continue;
+    const c = l.trim().split(/\s+/);
+    if (c.length < 10) continue;
+    let cadeia, numero;
+    if (c.length >= 11 && !/^-?\d/.test(c[4])) { cadeia = c[4]; numero = c[5]; }
+    else { cadeia = ""; numero = c[4]; }
+    const chave = cadeia + "|" + numero;
+    if (chave === anterior) continue;
+    anterior = chave;
+    res.push([cadeia, numero, c[3].toUpperCase()]);
+  }
+  return res;
+}
+
+function tokensCif(linha) {
+  const out = []; const re = /'(.*?)'(?=\s|$)|"(.*?)"(?=\s|$)|(\S+)/g; let m;
+  while ((m = re.exec(linha)) !== null) out.push(m[1] ?? m[2] ?? m[3]);
+  return out;
+}
+
+function lerMmcif(linhas) {
+  const campos = []; let i = 0; const n = linhas.length;
+  while (i < n) {
+    if (linhas[i].trim() === "loop_" && i + 1 < n && linhas[i + 1].trim().startsWith("_atom_site.")) {
+      i++;
+      while (i < n && linhas[i].trim().startsWith("_atom_site.")) {
+        campos.push(linhas[i].trim().split(/\s+/)[0].slice(11)); i++;
+      }
+      break;
+    }
+    i++;
+  }
+  if (!campos.length) return [];
+  const col = (...nomes) => { for (const nm of nomes) { const k = campos.indexOf(nm); if (k >= 0) return k; } return -1; };
+  const kNome = col("label_comp_id", "auth_comp_id"), kCad = col("auth_asym_id", "label_asym_id");
+  const kNum = col("auth_seq_id", "label_seq_id"), kIns = col("pdbx_PDB_ins_code");
+  const kMod = col("pdbx_PDB_model_num"), kEnt = col("label_entity_id");
+  if (kNome < 0 || kNum < 0) return [];
+  const nc = campos.length, res = [];
+  let tok = [], usado = 0, anterior = null, primeiroModelo = null;
+  for (; i < n; i++) {
+    const l = linhas[i].trim();
+    if (/^(_|loop_|data_|#)/.test(l) && usado > 0 && tok.length === 0) break;
+    if (l === "" || l.startsWith("#")) continue;
+    tok = tok.concat(tokensCif(l));
+    while (tok.length >= nc) {
+      const r = tok.slice(0, nc); tok = tok.slice(nc); usado++;
+      if (kMod >= 0) {
+        if (primeiroModelo === null) primeiroModelo = r[kMod];
+        else if (r[kMod] !== primeiroModelo) return res;
+      }
+      const cadeia = kCad >= 0 ? r[kCad] : "";
+      let numero = r[kNum];
+      let ins = kIns >= 0 ? r[kIns] : ""; if (ins === "?" || ins === ".") ins = "";
+      let ent = kEnt >= 0 ? r[kEnt] : "";
+      if (numero === "?" || numero === ".") numero = ""; else ent = "";
+      const chave = [cadeia, numero, ins, ent].join("|");
+      if (chave === anterior) continue;
+      anterior = chave;
+      res.push([cadeia, numero + ins, r[kNome].toUpperCase()]);
+    }
+  }
+  return res;
+}
+
+function lerGro(linhas) {
+  const natomos = parseInt((linhas[1] || "").trim().split(/\s+/)[0], 10);
+  if (!(natomos > 0)) return [];
+  const res = []; let anterior = null;
+  for (const l of linhas.slice(2, 2 + natomos)) {
+    const chave = l.slice(0, 10);
+    if (chave === anterior) continue;
+    anterior = chave;
+    res.push(["", l.slice(0, 5).trim(), l.slice(5, 10).trim().toUpperCase()]);
+  }
+  return res;
+}
+
+const LEITORES = { PDB: lerPdb, PQR: lerPqr, mmCIF: lerMmcif, GRO: lerGro };
+
+function contarTexto(nomeArquivo, texto) {
+  const linhas = texto.split(/\r?\n/);
+  const formato = detectarFormato(nomeArquivo, linhas);
+  const residuos = LEITORES[formato](linhas);
+  const contagem = {}; AMINOACIDOS.forEach(a => contagem[a] = 0);
+  const convertidos = new Map(), resumo = new Map(), naoId = [];
+  for (const [cadeia, numero, nome] of residuos) {
+    const aa = padronizar(nome);
+    if (aa) {
+      contagem[aa]++;
+      if (aa !== nome) { const k = nome + "->" + aa; convertidos.set(k, (convertidos.get(k) || 0) + 1); }
+    } else if (!AGUAS.has(nome)) {
+      naoId.push([cadeia, numero, nome]);
+      resumo.set(nome, (resumo.get(nome) || 0) + 1);
+    }
+  }
+  const total = AMINOACIDOS.reduce((s, a) => s + contagem[a], 0);
+  return { arquivo: nomeArquivo, formato, nResiduos: residuos.length, contagem, total, convertidos, resumo, naoId };
+}
+
+function relatorioTexto(r) {
+  const pad = (s, n) => String(s).padEnd(n), padL = (s, n) => String(s).padStart(n);
+  const out = ["Arquivo: " + r.arquivo, "Formato: " + r.formato, "", "Residuo  Quantidade", "-------------------"];
+  AMINOACIDOS.forEach(a => out.push(pad(a, 8) + padL(r.contagem[a], 11)));
+  out.push("-------------------", pad("TOTAL", 8) + padL(r.total, 11), "");
+  if (r.convertidos.size) {
+    out.push("Nomes convertidos para o aminoacido padrao (ja incluidos acima):");
+    out.push("  " + [...r.convertidos].map(([k, v]) => k + " x" + v).join(", "));
+    out.push("");
+  }
+  if (r.naoId.length) {
+    out.push("Residuos nao identificados: " + r.naoId.length + " (fora da contagem acima)");
+    out.push("  Resumo: " + [...r.resumo].map(([k, v]) => k + " x" + v).join(", "));
+    out.push("  Nome  Cadeia  Numero");
+    r.naoId.forEach(([c, num, nome]) => out.push("  " + pad(nome, 5) + " " + pad(c || "-", 7) + " " + num));
+  } else {
+    out.push("Residuos nao identificados: nenhum");
+  }
+  return out.join("\n") + "\n";
+}
+
+
+
+
+const FONTES = [{"rotulo": "Python", "nome": "contar_residuos.py", "ext": "py", "hl": "python", "desc": "Python 3.6 ou mais novo, sem pacotes extras. Funciona em Windows, Linux e macOS.", "uso": "python contar_residuos.py entrada.pdb\npython contar_residuos.py entrada.cif.gz -o contagem.txt", "texto": "#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\n\"\"\"\ncontar_residuos.py - Conta os residuos de aminoacidos de uma estrutura, por tipo.\n\nUso:\n    python contar_residuos.py entrada.pdb\n    python contar_residuos.py entrada.cif -o contagem.txt\n\nFormatos aceitos (reconhecidos pela extensao e pelo conteudo):\n    PDB   (.pdb .ent .brk)  Protein Data Bank e saidas de GROMACS, AMBER,\n                            CHARMM/NAMD, CHARMM-GUI, VMD, PyMOL\n    PQR   (.pqr)            PDB2PQR / APBS (colunas separadas por espaco)\n    mmCIF (.cif .mmcif)     PDBx/mmCIF do RCSB/PDBe\n    GRO   (.gro)            coordenadas do GROMACS\n    Qualquer um deles compactado em .gz (ex.: 1abc.cif.gz).\n\nSaida: quantidade de cada um dos 20 aminoacidos, total, nomes convertidos e a\nlista de residuos nao identificados (fora dos 20: modificados, ligantes, ions,\nlipidios, acucares, nucleotideos...). A mesma saida e gravada em um arquivo\nde texto (por padrao, \u003centrada>_contagem.txt).\n\nRegras de contagem:\n- Um residuo novo comeca quando cadeia, segmento, numero ou codigo de\n  insercao mudam de um atomo para o seguinte (ou apos TER). Assim funcionam\n  arquivos sem cadeia e numeracao que reinicia apos 9999 ou 99999.\n- Conformacoes alternativas (altloc) do mesmo residuo contam uma vez.\n- Variantes de campo de forca (HID, HSD, HISE, CYX, CYS2, ASH, GLH, LYN...)\n  e terminais do AMBER/GROMACS (NALA, CLYS...) contam como o aminoacido padrao.\n- Aguas sao ignoradas. Em arquivos com varios modelos ou quadros, so o\n  primeiro e lido.\n\"\"\"\n\nimport argparse\nimport gzip\nimport os\nimport re\nimport sys\nfrom collections import OrderedDict\n\nAMINOACIDOS = [\"ALA\", \"ARG\", \"ASN\", \"ASP\", \"CYS\", \"GLN\", \"GLU\", \"GLY\", \"HIS\",\n               \"ILE\", \"LEU\", \"LYS\", \"MET\", \"PHE\", \"PRO\", \"SER\", \"THR\", \"TRP\",\n               \"TYR\", \"VAL\"]\n\nSINONIMOS = {\n    # histidina (AMBER, CHARMM, GROMACS, GROMOS)\n    \"HID\": \"HIS\", \"HIE\": \"HIS\", \"HIP\": \"HIS\", \"HIN\": \"HIS\", \"HSD\": \"HIS\",\n    \"HSE\": \"HIS\", \"HSP\": \"HIS\", \"HISD\": \"HIS\", \"HISE\": \"HIS\", \"HISH\": \"HIS\",\n    \"HISP\": \"HIS\", \"HISA\": \"HIS\", \"HISB\": \"HIS\", \"HIS1\": \"HIS\", \"HIS2\": \"HIS\",\n    # cisteina (ponte dissulfeto, desprotonada, protonada)\n    \"CYX\": \"CYS\", \"CYM\": \"CYS\", \"CYN\": \"CYS\", \"CYS2\": \"CYS\", \"CYSH\": \"CYS\",\n    # acidos protonados\n    \"ASH\": \"ASP\", \"ASPH\": \"ASP\", \"ASPP\": \"ASP\",\n    \"GLH\": \"GLU\", \"GLUH\": \"GLU\", \"GLUP\": \"GLU\",\n    # lisina e arginina neutras/protonadas\n    \"LYN\": \"LYS\", \"LYSH\": \"LYS\", \"LYSN\": \"LYS\", \"LSN\": \"LYS\", \"ARGN\": \"ARG\",\n}\n\nAGUAS = {\"HOH\", \"WAT\", \"H2O\", \"DOD\", \"D2O\", \"SOL\", \"TIP\", \"TIP2\", \"TIP3\",\n         \"TIP4\", \"TIP5\", \"TP3\", \"TP4\", \"T3P\", \"T4P\", \"T5P\", \"SPC\", \"SPCE\",\n         \"SWM4\", \"OPC\", \"OPC3\"}\n\n\ndef padronizar(nome):\n    \"\"\"Aminoacido padrao correspondente ao nome, ou None.\"\"\"\n    if nome in AMINOACIDOS:\n        return nome\n    if nome in SINONIMOS:\n        return SINONIMOS[nome]\n    if len(nome) == 4 and nome[0] in \"NC\":      # NALA, CLYS, NHIE...\n        resto = nome[1:]\n        if resto in AMINOACIDOS:\n            return resto\n        if resto in SINONIMOS:\n            return SINONIMOS[resto]\n    return None\n\n\n# ---------------------------------------------------------------- leitura\n\ndef abrir_linhas(caminho):\n    with open(caminho, \"rb\") as f:\n        inicio = f.read(2)\n    if inicio == b\"\\x1f\\x8b\":                   # gzip\n        dados = gzip.open(caminho, \"rb\").read()\n    else:\n        dados = open(caminho, \"rb\").read()\n    return dados.decode(\"latin-1\").splitlines()\n\n\ndef detectar_formato(caminho, linhas):\n    nome = caminho.lower()\n    if nome.endswith(\".gz\"):\n        nome = nome[:-3]\n    ext = os.path.splitext(nome)[1]\n    if ext in (\".cif\", \".mmcif\", \".pdbx\"):\n        return \"mmCIF\"\n    if ext == \".gro\":\n        return \"GRO\"\n    if ext == \".pqr\":\n        return \"PQR\"\n    if ext in (\".pdb\", \".ent\", \".brk\", \".pdbqt\"):\n        return \"PDB\"\n    # sem extensao conhecida: olha o conteudo\n    for l in linhas[:200]:\n        if l.startswith(\"data_\") or l.startswith(\"_atom_site.\"):\n            return \"mmCIF\"\n        if l.startswith((\"ATOM\", \"HETATM\")):\n            return \"PDB\"\n    if len(linhas) > 2 and linhas[1].strip().isdigit():\n        return \"GRO\"\n    return \"PDB\"\n\n\ndef ler_pdb(linhas):\n    \"\"\"PDB de colunas fixas. Devolve lista de (cadeia, numero, nome).\"\"\"\n    residuos, anterior = [], None\n    for l in linhas:\n        reg = l[:6]\n        if reg == \"ENDMDL\":\n            break                                # so o primeiro modelo\n        if reg.startswith(\"TER\"):\n            anterior = None\n            continue\n        if reg not in (\"ATOM  \", \"HETATM\") or len(l) \u003c 22:\n            continue\n        # cadeia (22) + numero (23-26) + insercao (27) + segmento (73-76)\n        chave = l[21:27] + \"|\" + l[72:76]\n        if chave == anterior:\n            continue\n        anterior = chave\n        cadeia = l[21].strip() or l[72:76].strip()\n        numero = l[22:27].strip()\n        nome = l[17:21].strip().upper()          # aceita nomes de 4 letras\n        residuos.append((cadeia, numero, nome))\n    return residuos\n\n\ndef ler_pqr(linhas):\n    \"\"\"PQR (campos separados por espaco, cadeia opcional).\"\"\"\n    residuos, anterior = [], None\n    for l in linhas:\n        if l.startswith(\"ENDMDL\"):\n            break\n        if l.startswith(\"TER\"):\n            anterior = None\n            continue\n        if not l.startswith((\"ATOM\", \"HETATM\")):\n            continue\n        c = l.split()\n        if len(c) \u003c 10:\n            continue\n        # ATOM serial atomo residuo [cadeia] numero x y z carga raio\n        if len(c) >= 11 and not re.match(r\"^-?\\d\", c[4]):\n            cadeia, numero = c[4], c[5]\n        else:\n            cadeia, numero = \"\", c[4]\n        chave = (cadeia, numero)\n        if chave == anterior:\n            continue\n        anterior = chave\n        residuos.append((cadeia, numero, c[3].upper()))\n    return residuos\n\n\ndef tokens_cif(linha):\n    \"\"\"Separa uma linha de mmCIF em campos, respeitando aspas.\"\"\"\n    return [a or b or c for a, b, c in\n            re.findall(r\"'(.*?)'(?=\\s|$)|\\\"(.*?)\\\"(?=\\s|$)|(\\S+)\", linha)]\n\n\ndef ler_mmcif(linhas):\n    \"\"\"mmCIF: le o bloco loop_ _atom_site.\"\"\"\n    campos, valores = [], []\n    i, n = 0, len(linhas)\n    while i \u003c n:                                 # acha o loop de _atom_site\n        if linhas[i].strip() == \"loop_\" and i + 1 \u003c n \\\n                and linhas[i + 1].strip().startswith(\"_atom_site.\"):\n            i += 1\n            while i \u003c n and linhas[i].strip().startswith(\"_atom_site.\"):\n                campos.append(linhas[i].strip().split()[0][len(\"_atom_site.\"):])\n                i += 1\n            break\n        i += 1\n    if not campos:\n        return []\n    while i \u003c n:\n        l = linhas[i].strip()\n        if l.startswith((\"_\", \"loop_\", \"data_\", \"#\")) and valores \\\n                and len(valores) % len(campos) == 0:\n            break\n        if l and not l.startswith(\"#\"):\n            valores.extend(tokens_cif(l))\n        i += 1\n\n    def col(*nomes):\n        for nm in nomes:\n            if nm in campos:\n                return campos.index(nm)\n        return None\n\n    k_nome = col(\"label_comp_id\", \"auth_comp_id\")\n    k_cad = col(\"auth_asym_id\", \"label_asym_id\")\n    k_num = col(\"auth_seq_id\", \"label_seq_id\")\n    k_ins = col(\"pdbx_PDB_ins_code\")\n    k_mod = col(\"pdbx_PDB_model_num\")\n    k_ent = col(\"label_entity_id\")\n    if k_nome is None or k_num is None:\n        return []\n    residuos, anterior, primeiro_modelo = [], None, None\n    nc = len(campos)\n    for j in range(0, len(valores) - nc + 1, nc):\n        r = valores[j:j + nc]\n        if k_mod is not None:\n            if primeiro_modelo is None:\n                primeiro_modelo = r[k_mod]\n            elif r[k_mod] != primeiro_modelo:\n                break\n        cadeia = r[k_cad] if k_cad is not None else \"\"\n        numero = r[k_num]\n        ins = r[k_ins] if k_ins is not None else \"\"\n        ins = \"\" if ins in (\"?\", \".\") else ins\n        ent = r[k_ent] if k_ent is not None else \"\"\n        if numero in (\"?\", \".\"):                 # sem numero: usa a entidade\n            numero = \"\"\n        chave = (cadeia, numero, ins, ent if numero == \"\" else \"\")\n        if chave == anterior:\n            continue\n        anterior = chave\n        residuos.append((cadeia, numero + ins, r[k_nome].upper()))\n    return residuos\n\n\ndef ler_gro(linhas):\n    \"\"\"GRO: primeira linha titulo, segunda numero de atomos.\"\"\"\n    try:\n        natomos = int(linhas[1].split()[0])\n    except (IndexError, ValueError):\n        return []\n    residuos, anterior = [], None\n    for l in linhas[2:2 + natomos]:             # so o primeiro quadro\n        chave = l[0:10]                          # numero (1-5) + nome (6-10)\n        if chave == anterior:\n            continue\n        anterior = chave\n        residuos.append((\"\", l[0:5].strip(), l[5:10].strip().upper()))\n    return residuos\n\n\nLEITORES = {\"PDB\": ler_pdb, \"PQR\": ler_pqr, \"mmCIF\": ler_mmcif, \"GRO\": ler_gro}\n\n\n# ---------------------------------------------------------------- contagem\n\ndef contar(residuos):\n    contagem = OrderedDict((aa, 0) for aa in AMINOACIDOS)\n    convertidos = OrderedDict()\n    nao_identificados = []\n    for cadeia, numero, nome in residuos:\n        aa = padronizar(nome)\n        if aa:\n            contagem[aa] += 1\n            if aa != nome:\n                k = f\"{nome}->{aa}\"\n                convertidos[k] = convertidos.get(k, 0) + 1\n        elif nome not in AGUAS:\n            nao_identificados.append((cadeia, numero, nome))\n    return contagem, convertidos, nao_identificados\n\n\ndef relatorio(arquivo, formato, contagem, convertidos, nao_identificados):\n    out = [f\"Arquivo: {arquivo}\", f\"Formato: {formato}\", \"\",\n           \"Residuo  Quantidade\", \"-------------------\"]\n    for aa, q in contagem.items():\n        out.append(f\"{aa:\u003c8}{q:>11d}\")\n    out += [\"-------------------\",\n            f\"{'TOTAL':\u003c8}{sum(contagem.values()):>11d}\", \"\"]\n    if convertidos:\n        out.append(\"Nomes convertidos para o aminoacido padrao (ja incluidos acima):\")\n        out.append(\"  \" + \", \".join(f\"{k} x{v}\" for k, v in convertidos.items()))\n        out.append(\"\")\n    if nao_identificados:\n        resumo = OrderedDict()\n        for _, _, nome in nao_identificados:\n            resumo[nome] = resumo.get(nome, 0) + 1\n        out.append(f\"Residuos nao identificados: {len(nao_identificados)} \"\n                   \"(fora da contagem acima)\")\n        out.append(\"  Resumo: \" + \", \".join(f\"{k} x{v}\" for k, v in resumo.items()))\n        out.append(\"  Nome  Cadeia  Numero\")\n        for cadeia, numero, nome in nao_identificados:\n            out.append(f\"  {nome:\u003c5} {cadeia or '-':\u003c7} {numero}\")\n    else:\n        out.append(\"Residuos nao identificados: nenhum\")\n    return \"\\n\".join(out) + \"\\n\"\n\n\ndef main():\n    p = argparse.ArgumentParser(description=\"Conta os residuos de uma estrutura \"\n                                \"(PDB, PQR, mmCIF, GRO, tambem .gz).\")\n    p.add_argument(\"arquivo\", help=\"arquivo de entrada\")\n    p.add_argument(\"-o\", \"--saida\", help=\"arquivo de saida (texto)\")\n    a = p.parse_args()\n\n    if not os.path.isfile(a.arquivo):\n        sys.exit(f\"Arquivo nao encontrado: {a.arquivo}\")\n    linhas = abrir_linhas(a.arquivo)\n    formato = detectar_formato(a.arquivo, linhas)\n    residuos = LEITORES[formato](linhas)\n    if not residuos:\n        sys.exit(f\"Nenhum atomo encontrado (formato lido: {formato}).\")\n\n    texto = relatorio(os.path.basename(a.arquivo), formato, *contar(residuos))\n    print(texto, end=\"\")\n    base = a.arquivo[:-3] if a.arquivo.lower().endswith(\".gz\") else a.arquivo\n    saida = a.saida or os.path.splitext(base)[0] + \"_contagem.txt\"\n    try:\n        with open(saida, \"w\", encoding=\"utf-8\") as f:\n            f.write(texto)\n        print(f\"\\nSaida gravada em: {saida}\")\n    except OSError as erro:\n        print(f\"\\nNao foi possivel gravar {saida}: {erro}\")\n\n\nif __name__ == \"__main__\":\n    main()\n"}, {"rotulo": "Bash", "nome": "contar_residuos.sh", "ext": "sh", "hl": "bash", "desc": "Só bash, awk e gzip, que já vêm no Linux e no macOS. Não precisa de Python.", "uso": "bash contar_residuos.sh entrada.pdb\nbash contar_residuos.sh entrada.gro contagem.txt", "texto": "#!/bin/bash\n# contar_residuos.sh - Conta os residuos de aminoacidos de uma estrutura, por tipo.\n#\n# Uso:\n#     bash contar_residuos.sh entrada.pdb\n#     bash contar_residuos.sh entrada.cif contagem.txt\n#\n# Formatos aceitos (reconhecidos pela extensao e pelo conteudo):\n#     PDB   (.pdb .ent .brk)  Protein Data Bank e saidas de GROMACS, AMBER,\n#                             CHARMM/NAMD, CHARMM-GUI, VMD, PyMOL\n#     PQR   (.pqr)            PDB2PQR / APBS\n#     mmCIF (.cif .mmcif)     PDBx/mmCIF do RCSB/PDBe\n#     GRO   (.gro)            coordenadas do GROMACS\n#     Qualquer um deles compactado em .gz.\n#\n# Saida: quantidade de cada um dos 20 aminoacidos, total, nomes convertidos e\n# lista dos residuos nao identificados. Tambem gravada em arquivo (padrao:\n# \u003centrada>_contagem.txt).\n#\n# Regras: um residuo novo comeca quando cadeia, segmento, numero ou codigo de\n# insercao mudam de um atomo para o seguinte; altlocs contam uma vez;\n# variantes de campo de forca (HID, HSD, HISE, CYX, CYS2...) e terminais\n# (NALA, CLYS...) contam como o aminoacido padrao; aguas sao ignoradas; so o\n# primeiro modelo/quadro e lido.\n# Usa apenas bash, awk e gzip, presentes em qualquer Linux ou macOS.\n\nif [ $# -lt 1 ]; then\n    echo \"Uso: bash $0 entrada [saida.txt]\"\n    exit 1\nfi\narq=\"$1\"\nif [ ! -f \"$arq\" ]; then\n    echo \"Arquivo nao encontrado: $arq\"\n    exit 1\nfi\n\n# Descompacta se for gzip\nler() {\n    if [ \"$(head -c 2 \"$arq\" | od -An -tx1 | tr -d ' \\n')\" = \"1f8b\" ]; then\n        gzip -dc \"$arq\"\n    else\n        cat \"$arq\"\n    fi\n}\n\n# Formato pela extensao (ignorando .gz) e, se preciso, pelo conteudo\nbase=\"${arq%.gz}\"; base=\"${base%.GZ}\"\next=\"$(echo \"${base##*.}\" | tr '[:upper:]' '[:lower:]')\"\n[ \"$base\" = \"${base%.*}\" ] && ext=\"\"\ncase \"$ext\" in\n    cif|mmcif|pdbx)      fmt=\"mmCIF\" ;;\n    gro)                 fmt=\"GRO\" ;;\n    pqr)                 fmt=\"PQR\" ;;\n    pdb|ent|brk|pdbqt)   fmt=\"PDB\" ;;\n    *)\n        if ler | head -200 | grep -qE '^(data_|_atom_site\\.)'; then fmt=\"mmCIF\"\n        elif ler | head -200 | grep -qE '^(ATOM|HETATM)'; then fmt=\"PDB\"\n        elif ler | sed -n 2p | grep -qE '^ *[0-9]+ *$'; then fmt=\"GRO\"\n        else fmt=\"PDB\"; fi ;;\nesac\n\nsaida=\"${2:-${base%.*}_contagem.txt}\"\n\nler | awk -v arquivo=\"$(basename \"$arq\")\" -v fmt=\"$fmt\" '\nfunction padronizar(nome,   resto, p) {\n    if (nome in padrao) return nome\n    if (nome in sinonimo) return sinonimo[nome]\n    p = substr(nome, 1, 1)\n    if (length(nome) == 4 && (p == \"N\" || p == \"C\")) {\n        resto = substr(nome, 2)\n        if (resto in padrao) return resto\n        if (resto in sinonimo) return sinonimo[resto]\n    }\n    return \"\"\n}\nfunction trim(s) { gsub(/^[ \\t\\r]+|[ \\t\\r]+$/, \"\", s); return s }\nfunction registrar(cadeia, numero, nome,   p, c) {\n    nome = toupper(nome)\n    p = padronizar(nome)\n    if (p != \"\") {\n        cont[p]++\n        if (p != nome) {\n            c = nome \"->\" p\n            if (!(c in conv)) { nc++; ordc[nc] = c }\n            conv[c]++\n        }\n        return\n    }\n    if (nome in agua) return\n    if (cadeia == \"\") cadeia = \"-\"\n    nd++; dnome[nd] = nome; dcad[nd] = cadeia; dnum[nd] = numero\n    if (!(nome in resumo)) { nr++; ordem[nr] = nome }\n    resumo[nome]++\n}\n# separa uma linha de mmCIF em campos, respeitando aspas\nfunction tokens_cif(s,   i, n, ch, q, tok, dentro) {\n    n = length(s); i = 1\n    while (i \u003c= n) {\n        ch = substr(s, i, 1)\n        if (ch == \" \" || ch == \"\\t\" || ch == \"\\r\") { i++; continue }\n        if (ch == \"\\047\" || ch == \"\\\"\") {\n            q = ch; tok = \"\"; i++\n            while (i \u003c= n) {\n                ch = substr(s, i, 1)\n                if (ch == q && (i == n || substr(s, i + 1, 1) ~ /[ \\t\\r]/)) { i++; break }\n                tok = tok ch; i++\n            }\n        } else {\n            tok = \"\"\n            while (i \u003c= n) {\n                ch = substr(s, i, 1)\n                if (ch == \" \" || ch == \"\\t\" || ch == \"\\r\") break\n                tok = tok ch; i++\n            }\n        }\n        nv++; val[nv] = tok\n    }\n}\nfunction linha_cif(   j, base, cad, num, ins, ent, chave) {\n    while (nv - usado >= ncampos) {\n        base = usado\n        usado += ncampos\n        if (k_mod) {\n            if (primeiro_modelo == \"\") primeiro_modelo = val[base + k_mod]\n            else if (val[base + k_mod] != primeiro_modelo) { fim = 1; return }\n        }\n        cad = k_cad ? val[base + k_cad] : \"\"\n        num = val[base + k_num]\n        ins = k_ins ? val[base + k_ins] : \"\"\n        if (ins == \"?\" || ins == \".\") ins = \"\"\n        ent = k_ent ? val[base + k_ent] : \"\"\n        if (num == \"?\" || num == \".\") num = \"\"; else ent = \"\"\n        chave = cad SUBSEP num SUBSEP ins SUBSEP ent\n        if (chave != anterior) { anterior = chave; registrar(cad, num ins, val[base + k_nome]) }\n        for (j = base + 1; j \u003c= usado; j++) delete val[j]\n    }\n}\nBEGIN {\n    n = split(\"ALA ARG ASN ASP CYS GLN GLU GLY HIS ILE LEU LYS MET PHE PRO SER THR TRP TYR VAL\", aa, \" \")\n    for (i = 1; i \u003c= n; i++) { padrao[aa[i]] = 1; cont[aa[i]] = 0 }\n    m = split(\"HID HIE HIP HIN HSD HSE HSP HISD HISE HISH HISP HISA HISB HIS1 HIS2\", t, \" \")\n    for (i = 1; i \u003c= m; i++) sinonimo[t[i]] = \"HIS\"\n    m = split(\"CYX CYM CYN CYS2 CYSH\", t, \" \");   for (i = 1; i \u003c= m; i++) sinonimo[t[i]] = \"CYS\"\n    m = split(\"ASH ASPH ASPP\", t, \" \");           for (i = 1; i \u003c= m; i++) sinonimo[t[i]] = \"ASP\"\n    m = split(\"GLH GLUH GLUP\", t, \" \");           for (i = 1; i \u003c= m; i++) sinonimo[t[i]] = \"GLU\"\n    m = split(\"LYN LYSH LYSN LSN\", t, \" \");       for (i = 1; i \u003c= m; i++) sinonimo[t[i]] = \"LYS\"\n    sinonimo[\"ARGN\"] = \"ARG\"\n    m = split(\"HOH WAT H2O DOD D2O SOL TIP TIP2 TIP3 TIP4 TIP5 TP3 TP4 T3P T4P T5P SPC SPCE SWM4 OPC OPC3\", t, \" \")\n    for (i = 1; i \u003c= m; i++) agua[t[i]] = 1\n    nd = 0; nr = 0; nc = 0; anterior = \"\"; fim = 0\n    estado = 0; ncampos = 0; nv = 0; usado = 0; primeiro_modelo = \"\"\n}\nfim { next }\n\n# ---------- PDB (colunas fixas)\nfmt == \"PDB\" {\n    if ($0 ~ /^ENDMDL/) { fim = 1; next }\n    if ($0 ~ /^TER/) { anterior = \"\"; next }\n    if ($0 !~ /^(ATOM  |HETATM)/ || length($0) \u003c 22) next\n    chave = substr($0, 22, 6) \"|\" substr($0, 73, 4)\n    if (chave == anterior) next\n    anterior = chave\n    cadeia = trim(substr($0, 22, 1)); if (cadeia == \"\") cadeia = trim(substr($0, 73, 4))\n    registrar(cadeia, trim(substr($0, 23, 5)), trim(substr($0, 18, 4)))\n    next\n}\n\n# ---------- PQR (campos separados por espaco)\nfmt == \"PQR\" {\n    if ($0 ~ /^ENDMDL/) { fim = 1; next }\n    if ($0 ~ /^TER/) { anterior = \"\"; next }\n    if ($0 !~ /^(ATOM|HETATM)/ || NF \u003c 10) next\n    if (NF >= 11 && $5 !~ /^-?[0-9]/) { cadeia = $5; numero = $6 } else { cadeia = \"\"; numero = $5 }\n    chave = cadeia SUBSEP numero\n    if (chave == anterior) next\n    anterior = chave\n    registrar(cadeia, numero, $4)\n    next\n}\n\n# ---------- GRO (so o primeiro quadro)\nfmt == \"GRO\" {\n    if (NR == 2) { natomos = $1 + 0; next }\n    if (NR \u003c 3) next\n    if (NR > natomos + 2) { fim = 1; next }\n    chave = substr($0, 1, 10)\n    if (chave == anterior) next\n    anterior = chave\n    registrar(\"\", trim(substr($0, 1, 5)), trim(substr($0, 6, 5)))\n    next\n}\n\n# ---------- mmCIF (loop _atom_site)\nfmt == \"mmCIF\" {\n    s = trim($0)\n    if (estado == 0) { if (s == \"loop_\") estado = 1; next }\n    if (estado == 1) {\n        if (s ~ /^_atom_site\\./) {\n            split(s, partes, \" \")\n            ncampos++; nomecampo = substr(partes[1], 12)\n            if (nomecampo == \"label_comp_id\") k_nome = ncampos\n            if (nomecampo == \"auth_comp_id\")  k_auth_nome = ncampos\n            if (nomecampo == \"auth_asym_id\")  k_cad = ncampos\n            if (nomecampo == \"label_asym_id\") k_lcad = ncampos\n            if (nomecampo == \"auth_seq_id\")   k_num = ncampos\n            if (nomecampo == \"label_seq_id\")  k_lnum = ncampos\n            if (nomecampo == \"pdbx_PDB_ins_code\") k_ins = ncampos\n            if (nomecampo == \"pdbx_PDB_model_num\") k_mod = ncampos\n            if (nomecampo == \"label_entity_id\") k_ent = ncampos\n            next\n        }\n        if (ncampos == 0) { estado = (s == \"loop_\") ? 1 : 0; next }\n        if (!k_nome) k_nome = k_auth_nome\n        if (!k_cad) k_cad = k_lcad\n        if (!k_num) k_num = k_lnum\n        if (!k_nome || !k_num) { fim = 1; next }\n        estado = 2\n    }\n    if (estado == 2) {\n        if (s ~ /^(_|loop_|data_|#)/ && (nv - usado) == 0 && usado > 0) { fim = 1; next }\n        if (s != \"\" && s !~ /^#/) { tokens_cif(s); linha_cif() }\n    }\n    next\n}\n\nEND {\n    print \"Arquivo: \" arquivo\n    print \"Formato: \" fmt\n    print \"\"\n    print \"Residuo  Quantidade\"\n    print \"-------------------\"\n    total = 0\n    for (i = 1; i \u003c= n; i++) { printf \"%-8s%11d\\n\", aa[i], cont[aa[i]]; total += cont[aa[i]] }\n    print \"-------------------\"\n    printf \"%-8s%11d\\n\", \"TOTAL\", total\n    print \"\"\n    if (nc > 0) {\n        print \"Nomes convertidos para o aminoacido padrao (ja incluidos acima):\"\n        linha = \"  \"\n        for (i = 1; i \u003c= nc; i++) linha = linha (i > 1 ? \", \" : \"\") ordc[i] \" x\" conv[ordc[i]]\n        print linha\n        print \"\"\n    }\n    if (nd > 0) {\n        print \"Residuos nao identificados: \" nd \" (fora da contagem acima)\"\n        linha = \"  Resumo: \"\n        for (i = 1; i \u003c= nr; i++) linha = linha (i > 1 ? \", \" : \"\") ordem[i] \" x\" resumo[ordem[i]]\n        print linha\n        print \"  Nome  Cadeia  Numero\"\n        for (i = 1; i \u003c= nd; i++) printf \"  %-5s %-7s %s\\n\", dnome[i], dcad[i], dnum[i]\n    } else {\n        print \"Residuos nao identificados: nenhum\"\n    }\n}' | tee \"$saida\"\n\necho\necho \"Saida gravada em: $saida\"\n"}, {"rotulo": "PowerShell", "nome": "contar_residuos.ps1", "ext": "ps1", "hl": "powershell", "desc": "Windows PowerShell 5.1 (já vem no Windows) ou PowerShell 7. Se o Windows bloquear scripts, use a segunda forma.", "uso": ".\\contar_residuos.ps1 entrada.pdb\npowershell -ExecutionPolicy Bypass -File .\\contar_residuos.ps1 entrada.pdb", "texto": "\u003c#\ncontar_residuos.ps1 - Conta os residuos de aminoacidos de uma estrutura, por tipo.\n\nUso (PowerShell no Windows, Linux ou macOS):\n    .\\contar_residuos.ps1 entrada.pdb\n    .\\contar_residuos.ps1 entrada.cif contagem.txt\n\nSe o Windows bloquear a execucao de scripts, rode uma vez:\n    powershell -ExecutionPolicy Bypass -File .\\contar_residuos.ps1 entrada.pdb\n\nFormatos aceitos (reconhecidos pela extensao e pelo conteudo):\n    PDB   (.pdb .ent .brk)  Protein Data Bank e saidas de GROMACS, AMBER,\n                            CHARMM/NAMD, CHARMM-GUI, VMD, PyMOL\n    PQR   (.pqr)            PDB2PQR / APBS\n    mmCIF (.cif .mmcif)     PDBx/mmCIF do RCSB/PDBe\n    GRO   (.gro)            coordenadas do GROMACS\n    Qualquer um deles compactado em .gz.\n\nSaida: quantidade de cada um dos 20 aminoacidos, total, nomes convertidos e\nlista dos residuos nao identificados. Tambem gravada em arquivo (padrao:\n\u003centrada>_contagem.txt).\n\nRegras: um residuo novo comeca quando cadeia, segmento, numero ou codigo de\ninsercao mudam de um atomo para o seguinte; altlocs contam uma vez;\nvariantes de campo de forca (HID, HSD, HISE, CYX, CYS2...) e terminais\n(NALA, CLYS...) contam como o aminoacido padrao; aguas sao ignoradas; so o\nprimeiro modelo/quadro e lido. Funciona no Windows PowerShell 5.1 e no\nPowerShell 7.\n#>\nparam(\n    [Parameter(Mandatory = $true, Position = 0)][string]$Arquivo,\n    [Parameter(Position = 1)][string]$Saida = \"\"\n)\n\n$ErrorActionPreference = \"Stop\"\n\n$AMINOACIDOS = @(\"ALA\",\"ARG\",\"ASN\",\"ASP\",\"CYS\",\"GLN\",\"GLU\",\"GLY\",\"HIS\",\"ILE\",\n                 \"LEU\",\"LYS\",\"MET\",\"PHE\",\"PRO\",\"SER\",\"THR\",\"TRP\",\"TYR\",\"VAL\")\n$SINONIMOS = @{\n    \"HID\"=\"HIS\"; \"HIE\"=\"HIS\"; \"HIP\"=\"HIS\"; \"HIN\"=\"HIS\"; \"HSD\"=\"HIS\"; \"HSE\"=\"HIS\";\n    \"HSP\"=\"HIS\"; \"HISD\"=\"HIS\"; \"HISE\"=\"HIS\"; \"HISH\"=\"HIS\"; \"HISP\"=\"HIS\";\n    \"HISA\"=\"HIS\"; \"HISB\"=\"HIS\"; \"HIS1\"=\"HIS\"; \"HIS2\"=\"HIS\";\n    \"CYX\"=\"CYS\"; \"CYM\"=\"CYS\"; \"CYN\"=\"CYS\"; \"CYS2\"=\"CYS\"; \"CYSH\"=\"CYS\";\n    \"ASH\"=\"ASP\"; \"ASPH\"=\"ASP\"; \"ASPP\"=\"ASP\"; \"GLH\"=\"GLU\"; \"GLUH\"=\"GLU\"; \"GLUP\"=\"GLU\";\n    \"LYN\"=\"LYS\"; \"LYSH\"=\"LYS\"; \"LYSN\"=\"LYS\"; \"LSN\"=\"LYS\"; \"ARGN\"=\"ARG\"\n}\n$AGUAS = @(\"HOH\",\"WAT\",\"H2O\",\"DOD\",\"D2O\",\"SOL\",\"TIP\",\"TIP2\",\"TIP3\",\"TIP4\",\"TIP5\",\n           \"TP3\",\"TP4\",\"T3P\",\"T4P\",\"T5P\",\"SPC\",\"SPCE\",\"SWM4\",\"OPC\",\"OPC3\")\n\nfunction Padronizar([string]$nome) {\n    if ($AMINOACIDOS -ccontains $nome) { return $nome }\n    if ($SINONIMOS.ContainsKey($nome)) { return $SINONIMOS[$nome] }\n    if ($nome.Length -eq 4 -and ($nome[0] -ceq 'N' -or $nome[0] -ceq 'C')) {\n        $resto = $nome.Substring(1)\n        if ($AMINOACIDOS -ccontains $resto) { return $resto }\n        if ($SINONIMOS.ContainsKey($resto)) { return $SINONIMOS[$resto] }\n    }\n    return \"\"\n}\n\nfunction Corte([string]$s, [int]$ini, [int]$tam) {\n    # substring segura (colunas a partir de 0)\n    if ($ini -ge $s.Length) { return \"\" }\n    if ($ini + $tam -gt $s.Length) { $tam = $s.Length - $ini }\n    return $s.Substring($ini, $tam)\n}\n\n# ---------------------------------------------------------------- leitura\nif (-not (Test-Path -LiteralPath $Arquivo -PathType Leaf)) {\n    Write-Host \"Arquivo nao encontrado: $Arquivo\"; exit 1\n}\n$caminho = (Resolve-Path -LiteralPath $Arquivo).Path\n$bytes = [System.IO.File]::ReadAllBytes($caminho)\nif ($bytes.Length -ge 2 -and $bytes[0] -eq 0x1f -and $bytes[1] -eq 0x8b) {\n    $entrada = New-Object System.IO.MemoryStream(,$bytes)\n    $gz = New-Object System.IO.Compression.GZipStream($entrada, [System.IO.Compression.CompressionMode]::Decompress)\n    $saidaMem = New-Object System.IO.MemoryStream\n    $gz.CopyTo($saidaMem); $gz.Close()\n    $bytes = $saidaMem.ToArray()\n}\n$texto = [System.Text.Encoding]::GetEncoding(28591).GetString($bytes)\n$linhas = $texto -split \"\\r?\\n\"\n\n$nomeArq = [System.IO.Path]::GetFileName($caminho)\n$base = $nomeArq -replace '\\.gz$', ''\n$ext = [System.IO.Path]::GetExtension($base).ToLower()\nswitch ($ext) {\n    { $_ -in \".cif\", \".mmcif\", \".pdbx\" } { $fmt = \"mmCIF\"; break }\n    \".gro\" { $fmt = \"GRO\"; break }\n    \".pqr\" { $fmt = \"PQR\"; break }\n    { $_ -in \".pdb\", \".ent\", \".brk\", \".pdbqt\" } { $fmt = \"PDB\"; break }\n    default {\n        $fmt = \"\"\n        foreach ($l in ($linhas | Select-Object -First 200)) {\n            if ($l.StartsWith(\"data_\") -or $l.StartsWith(\"_atom_site.\")) { $fmt = \"mmCIF\"; break }\n            if ($l.StartsWith(\"ATOM\") -or $l.StartsWith(\"HETATM\")) { $fmt = \"PDB\"; break }\n        }\n        if ($fmt -eq \"\") {\n            if ($linhas.Count -gt 2 -and $linhas[1].Trim() -match '^\\d+$') { $fmt = \"GRO\" } else { $fmt = \"PDB\" }\n        }\n    }\n}\n\n# Cada item: @(cadeia, numero, nome)\n$residuos = New-Object System.Collections.Generic.List[object]\n\nif ($fmt -eq \"PDB\") {\n    $anterior = $null\n    foreach ($l in $linhas) {\n        if ($l.StartsWith(\"ENDMDL\")) { break }\n        if ($l.StartsWith(\"TER\")) { $anterior = $null; continue }\n        if (-not ($l.StartsWith(\"ATOM  \") -or $l.StartsWith(\"HETATM\")) -or $l.Length -lt 22) { continue }\n        $chave = (Corte $l 21 6) + \"|\" + (Corte $l 72 4)\n        if ($chave -ceq $anterior) { continue }\n        $anterior = $chave\n        $cadeia = (Corte $l 21 1).Trim()\n        if ($cadeia -eq \"\") { $cadeia = (Corte $l 72 4).Trim() }\n        $residuos.Add(@($cadeia, (Corte $l 22 5).Trim(), (Corte $l 17 4).Trim().ToUpper()))\n    }\n}\nelseif ($fmt -eq \"PQR\") {\n    $anterior = $null\n    foreach ($l in $linhas) {\n        if ($l.StartsWith(\"ENDMDL\")) { break }\n        if ($l.StartsWith(\"TER\")) { $anterior = $null; continue }\n        if (-not ($l.StartsWith(\"ATOM\") -or $l.StartsWith(\"HETATM\"))) { continue }\n        $c = $l.Trim() -split '\\s+'\n        if ($c.Count -lt 10) { continue }\n        if ($c.Count -ge 11 -and $c[4] -notmatch '^-?\\d') { $cadeia = $c[4]; $numero = $c[5] }\n        else { $cadeia = \"\"; $numero = $c[4] }\n        $chave = \"$cadeia|$numero\"\n        if ($chave -ceq $anterior) { continue }\n        $anterior = $chave\n        $residuos.Add(@($cadeia, $numero, $c[3].ToUpper()))\n    }\n}\nelseif ($fmt -eq \"GRO\") {\n    $natomos = 0\n    if ($linhas.Count -gt 1) { [int]::TryParse(($linhas[1].Trim() -split '\\s+')[0], [ref]$natomos) | Out-Null }\n    $anterior = $null\n    $fimGro = [Math]::Min($linhas.Count - 1, $natomos + 1)\n    for ($i = 2; $i -le $fimGro; $i++) {\n        $l = $linhas[$i]\n        $chave = Corte $l 0 10\n        if ($chave -ceq $anterior) { continue }\n        $anterior = $chave\n        $residuos.Add(@(\"\", (Corte $l 0 5).Trim(), (Corte $l 5 5).Trim().ToUpper()))\n    }\n}\nelse {\n    # mmCIF: bloco loop_ _atom_site\n    $campos = New-Object System.Collections.Generic.List[string]\n    $i = 0; $n = $linhas.Count\n    while ($i -lt $n) {\n        if ($linhas[$i].Trim() -eq \"loop_\" -and ($i + 1) -lt $n -and $linhas[$i + 1].Trim().StartsWith(\"_atom_site.\")) {\n            $i++\n            while ($i -lt $n -and $linhas[$i].Trim().StartsWith(\"_atom_site.\")) {\n                $campos.Add((($linhas[$i].Trim() -split '\\s+')[0]).Substring(11)); $i++\n            }\n            break\n        }\n        $i++\n    }\n    function Col([string[]]$nomes) {\n        foreach ($nm in $nomes) { $k = $campos.IndexOf($nm); if ($k -ge 0) { return $k } }\n        return -1\n    }\n    $kNome = Col @(\"label_comp_id\", \"auth_comp_id\")\n    $kCad = Col @(\"auth_asym_id\", \"label_asym_id\")\n    $kNum = Col @(\"auth_seq_id\", \"label_seq_id\")\n    $kIns = Col @(\"pdbx_PDB_ins_code\")\n    $kMod = Col @(\"pdbx_PDB_model_num\")\n    $kEnt = Col @(\"label_entity_id\")\n    $nc = $campos.Count\n    if ($nc -gt 0 -and $kNome -ge 0 -and $kNum -ge 0) {\n        $tok = New-Object System.Collections.Generic.List[string]\n        $re = [regex]\"'(.*?)'(?=\\s|$)|\"\"(.*?)\"\"(?=\\s|$)|(\\S+)\"\n        $anterior = $null; $primeiroModelo = $null; $parar = $false; $usado = 0\n        while ($i -lt $n -and -not $parar) {\n            $l = $linhas[$i].Trim(); $i++\n            if (($l.StartsWith(\"_\") -or $l.StartsWith(\"loop_\") -or $l.StartsWith(\"data_\") -or $l.StartsWith(\"#\")) -and $usado -gt 0 -and $tok.Count -eq 0) { break }\n            if ($l -eq \"\" -or $l.StartsWith(\"#\")) { continue }\n            foreach ($m in $re.Matches($l)) {\n                if ($m.Groups[1].Success) { $tok.Add($m.Groups[1].Value) }\n                elseif ($m.Groups[2].Success) { $tok.Add($m.Groups[2].Value) }\n                else { $tok.Add($m.Groups[3].Value) }\n            }\n            while ($tok.Count -ge $nc) {\n                $r = $tok.GetRange(0, $nc); $tok.RemoveRange(0, $nc); $usado++\n                if ($kMod -ge 0) {\n                    if ($null -eq $primeiroModelo) { $primeiroModelo = $r[$kMod] }\n                    elseif ($r[$kMod] -ne $primeiroModelo) { $parar = $true; break }\n                }\n                $cadeia = \"\"; if ($kCad -ge 0) { $cadeia = $r[$kCad] }\n                $numero = $r[$kNum]\n                $ins = \"\"; if ($kIns -ge 0) { $ins = $r[$kIns] }\n                if ($ins -eq \"?\" -or $ins -eq \".\") { $ins = \"\" }\n                $ent = \"\"; if ($kEnt -ge 0) { $ent = $r[$kEnt] }\n                if ($numero -eq \"?\" -or $numero -eq \".\") { $numero = \"\" } else { $ent = \"\" }\n                $chave = \"$cadeia|$numero|$ins|$ent\"\n                if ($chave -ceq $anterior) { continue }\n                $anterior = $chave\n                $residuos.Add(@($cadeia, \"$numero$ins\", $r[$kNome].ToUpper()))\n            }\n        }\n    }\n}\n\nif ($residuos.Count -eq 0) {\n    Write-Host \"Nenhum atomo encontrado (formato lido: $fmt).\"; exit 1\n}\n\n# ---------------------------------------------------------------- contagem\n$cont = [ordered]@{}\nforeach ($aa in $AMINOACIDOS) { $cont[$aa] = 0 }\n$conv = [ordered]@{}\n$resumo = [ordered]@{}\n$naoId = New-Object System.Collections.Generic.List[object]\nforeach ($r in $residuos) {\n    $nome = $r[2]\n    $p = Padronizar $nome\n    if ($p -ne \"\") {\n        $cont[$p]++\n        if ($p -cne $nome) {\n            $k = \"$nome->$p\"\n            if ($conv.Contains($k)) { $conv[$k]++ } else { $conv[$k] = 1 }\n        }\n    }\n    elseif ($AGUAS -cnotcontains $nome) {\n        $naoId.Add($r)\n        if ($resumo.Contains($nome)) { $resumo[$nome]++ } else { $resumo[$nome] = 1 }\n    }\n}\n\n$out = New-Object System.Collections.Generic.List[string]\n$out.Add(\"Arquivo: $nomeArq\"); $out.Add(\"Formato: $fmt\"); $out.Add(\"\")\n$out.Add(\"Residuo  Quantidade\"); $out.Add(\"-------------------\")\n$total = 0\nforeach ($aa in $AMINOACIDOS) { $out.Add((\"{0,-8}{1,11}\" -f $aa, $cont[$aa])); $total += $cont[$aa] }\n$out.Add(\"-------------------\")\n$out.Add((\"{0,-8}{1,11}\" -f \"TOTAL\", $total))\n$out.Add(\"\")\nif ($conv.Count -gt 0) {\n    $out.Add(\"Nomes convertidos para o aminoacido padrao (ja incluidos acima):\")\n    $out.Add(\"  \" + (($conv.Keys | ForEach-Object { \"$_ x$($conv[$_])\" }) -join \", \"))\n    $out.Add(\"\")\n}\nif ($naoId.Count -gt 0) {\n    $out.Add(\"Residuos nao identificados: $($naoId.Count) (fora da contagem acima)\")\n    $out.Add(\"  Resumo: \" + (($resumo.Keys | ForEach-Object { \"$_ x$($resumo[$_])\" }) -join \", \"))\n    $out.Add(\"  Nome  Cadeia  Numero\")\n    foreach ($r in $naoId) {\n        $cad = $r[0]; if ($cad -eq \"\") { $cad = \"-\" }\n        $out.Add((\"  {0,-5} {1,-7} {2}\" -f $r[2], $cad, $r[1]))\n    }\n}\nelse {\n    $out.Add(\"Residuos nao identificados: nenhum\")\n}\n\n$relatorio = ($out -join \"`n\") + \"`n\"\nWrite-Host -NoNewline $relatorio\nif ($Saida -eq \"\") {\n    $pasta = [System.IO.Path]::GetDirectoryName($caminho)\n    $Saida = Join-Path $pasta (([System.IO.Path]::GetFileNameWithoutExtension($base)) + \"_contagem.txt\")\n}\ntry {\n    [System.IO.File]::WriteAllText($Saida, $relatorio, (New-Object System.Text.UTF8Encoding($false)))\n    Write-Host \"\"\n    Write-Host \"Saida gravada em: $Saida\"\n}\ncatch {\n    Write-Host \"\"\n    Write-Host \"Nao foi possivel gravar ${Saida}: $($_.Exception.Message)\"\n}\n"}, {"rotulo": "Tcl (VMD)", "nome": "contar_residuos.tcl", "ext": "tcl", "hl": "tcl", "desc": "Conta a molécula já aberta no VMD, em qualquer formato que o VMD leia. Rode no Tk Console (Extensions > Tk Console).", "uso": "source /caminho/completo/contar_residuos.tcl\ncontar_residuos top \"chain A\" contagem.txt", "texto": "# contar_residuos.tcl - Conta os residuos da molecula ja aberta no VMD.\n#\n# Uso: com a molecula carregada, digite no Tk Console (Extensions > Tk Console):\n#\n#     source /caminho/completo/contar_residuos.tcl\n#\n# A contagem da molecula \"top\" aparece na hora. Depois disso o comando\n# contar_residuos fica disponivel para repetir:\n#\n#     contar_residuos                          ;# molecula top\n#     contar_residuos 0                        ;# molecula de ID 0\n#     contar_residuos top \"chain A\"            ;# so uma parte (selecao do VMD)\n#     contar_residuos top all contagem.txt     ;# grava tambem em arquivo\n#\n# Saida: quantidade de cada um dos 20 aminoacidos, total, nomes convertidos e\n# lista dos residuos nao identificados (qualquer nome fora dos 20). Aguas sao\n# ignoradas.\n#\n# Formatos: qualquer um que o VMD abra (PDB, PQR, mmCIF/PDBx, GRO, PSF+DCD,\n# MOL2, XYZ com nomes de residuo...). Quem separa os residuos e o proprio VMD\n# (atributo \"residue\"), entao trajetorias e varios quadros nao mudam a contagem.\n#\n# Funciona tambem com estruturas de simulacao (GROMACS, AMBER, CHARMM/NAMD):\n# nomes de 4 letras (HISE, CYS2...), variantes de protonacao (HID, HSD,\n# CYX...) e terminais (NALA, CLYS...) contam como o aminoacido padrao, e as\n# conversoes feitas aparecem na saida.\n\n# Devolve o aminoacido padrao correspondente ao nome, ou \"\" se nao houver\nproc padronizar_residuo {nome} {\n    set padrao [list ALA ARG ASN ASP CYS GLN GLU GLY HIS ILE LEU LYS MET PHE PRO SER THR TRP TYR VAL]\n    set sinonimos [list \\\n        HID HIS HIE HIS HIP HIS HIN HIS HSD HIS HSE HIS HSP HIS \\\n        HISD HIS HISE HIS HISH HIS HISP HIS HISA HIS HISB HIS HIS1 HIS HIS2 HIS \\\n        CYX CYS CYM CYS CYN CYS CYS2 CYS CYSH CYS \\\n        ASH ASP ASPH ASP ASPP ASP GLH GLU GLUH GLU GLUP GLU \\\n        LYN LYS LYSH LYS LYSN LYS LSN LYS ARGN ARG]\n    array set sin $sinonimos\n    if {[lsearch -exact $padrao $nome] >= 0} {\n        return $nome\n    }\n    if {[info exists sin($nome)]} {\n        return $sin($nome)\n    }\n    # terminais do AMBER/GROMACS: NALA, CLYS, NHIE...\n    set primeira [string index $nome 0]\n    if {[string length $nome] == 4 && ($primeira eq \"N\" || $primeira eq \"C\")} {\n        set resto [string range $nome 1 end]\n        if {[lsearch -exact $padrao $resto] >= 0} {\n            return $resto\n        }\n        if {[info exists sin($resto)]} {\n            return $sin($resto)\n        }\n    }\n    return \"\"\n}\n\nproc contar_residuos {{molid top} {selecao all} {saida \"\"}} {\n    set aminoacidos [list ALA ARG ASN ASP CYS GLN GLU GLY HIS ILE LEU LYS MET PHE PRO SER THR TRP TYR VAL]\n\n    if {[molinfo num] == 0} {\n        puts \"Nenhuma molecula carregada no VMD.\"\n        return\n    }\n    if {$molid eq \"top\"} {\n        set molid [molinfo top]\n    }\n\n    foreach aa $aminoacidos {\n        set cont($aa) 0\n    }\n\n    # aguas: macro \"water\" do VMD e os nomes usados por campos de forca\n    set aguas \"HOH WAT H2O DOD D2O SOL TIP TIP2 TIP3 TIP4 TIP5 TP3 TP4 T3P T4P T5P SPC SPCE SWM4 OPC OPC3\"\n    set sel [atomselect $molid \"($selecao) and not water and not resname $aguas\"]\n    set natomos [$sel num]\n    if {$natomos == 0} {\n        $sel delete\n        puts \"Nenhum atomo encontrado na selecao.\"\n        return\n    }\n    set lres   [$sel get residue]\n    set lnome  [$sel get resname]\n    set lcad   [$sel get chain]\n    set lnum   [$sel get resid]\n    set lins   [$sel get insertion]\n    $sel delete\n\n    # Cada residuo conta uma unica vez (indice interno \"residue\" do VMD)\n    set desconhecidos [list]\n    set ordem [list]\n    set ordemconv [list]\n    for {set i 0} {$i \u003c $natomos} {incr i} {\n        set res [lindex $lres $i]\n        if {[info exists visto($res)]} {\n            continue\n        }\n        set visto($res) 1\n        set nome [string toupper [string trim [lindex $lnome $i]]]\n        set aa [padronizar_residuo $nome]\n        if {$aa ne \"\"} {\n            incr cont($aa)\n            if {$aa ne $nome} {\n                set c \"$nome->$aa\"\n                if {![info exists conv($c)]} {\n                    set conv($c) 0\n                    lappend ordemconv $c\n                }\n                incr conv($c)\n            }\n        } else {\n            set cad [string trim [lindex $lcad $i]]\n            if {$cad eq \"\"} {\n                set cad \"-\"\n            }\n            set num [lindex $lnum $i]\n            append num [string trim [lindex $lins $i]]\n            lappend desconhecidos [list $nome $cad $num]\n            if {![info exists resumo($nome)]} {\n                set resumo($nome) 0\n                lappend ordem $nome\n            }\n            incr resumo($nome)\n        }\n    }\n\n    set linhas [list]\n    lappend linhas \"Molecula: [molinfo $molid get name]\"\n    lappend linhas \"\"\n    lappend linhas \"Residuo  Quantidade\"\n    lappend linhas \"-------------------\"\n    set total 0\n    foreach aa $aminoacidos {\n        lappend linhas [format \"%-8s%11d\" $aa $cont($aa)]\n        incr total $cont($aa)\n    }\n    lappend linhas \"-------------------\"\n    lappend linhas [format \"%-8s%11d\" TOTAL $total]\n    lappend linhas \"\"\n    if {[llength $ordemconv] > 0} {\n        lappend linhas \"Nomes convertidos para o aminoacido padrao (ja incluidos acima):\"\n        set partes [list]\n        foreach c $ordemconv {\n            lappend partes \"$c x$conv($c)\"\n        }\n        lappend linhas \"  [join $partes \", \"]\"\n        lappend linhas \"\"\n    }\n    set nd [llength $desconhecidos]\n    if {$nd > 0} {\n        lappend linhas \"Residuos nao identificados: $nd (fora da contagem acima)\"\n        set partes [list]\n        foreach n $ordem {\n            lappend partes \"$n x$resumo($n)\"\n        }\n        lappend linhas \"  Resumo: [join $partes \", \"]\"\n        lappend linhas \"  Nome  Cadeia  Numero\"\n        foreach d $desconhecidos {\n            lappend linhas [format \"  %-5s %-7s %s\" [lindex $d 0] [lindex $d 1] [lindex $d 2]]\n        }\n    } else {\n        lappend linhas \"Residuos nao identificados: nenhum\"\n    }\n\n    set texto [join $linhas \"\\n\"]\n    puts $texto\n    if {$saida ne \"\"} {\n        set f [open $saida w]\n        puts $f $texto\n        close $f\n        puts \"\"\n        puts \"Saida gravada em: [file normalize $saida]\"\n    }\n    return\n}\n\n# Ao dar \"source\", ja conta a molecula top\ncontar_residuos\n"}];
+const EXEMPLO = {"arquivo":"7D9Z.pdb","formato":"PDB","contagem":{"ALA":35,"ARG":8,"ASN":10,"ASP":16,"CYS":10,"GLN":17,"GLU":15,"GLY":34,"HIS":4,"ILE":14,"LEU":29,"LYS":23,"MET":2,"PHE":13,"PRO":23,"SER":59,"THR":45,"TRP":7,"TYR":22,"VAL":38},"total":424,"convertidos":[],"resumo":[["PCA",1],["EDO",6],["FLC",1]],"naoId":[["H","1","PCA"],["L","301","EDO"],["H","301","EDO"],["H","302","EDO"],["H","303","EDO"],["H","304","EDO"],["H","305","EDO"],["H","306","FLC"]]};
+const VALIDACAO = [["1A2C.pqr","PQR",298,"—","—"],["1BD2.cif.gz","mmCIF",815,"—","—"],["1BD2.pdb.gz","PDB",815,"—","—"],["1BD2_short.cif.gz","mmCIF",9,"—","—"],["1BD2_short.pdb.gz","PDB",9,"—","—"],["1YJP.cif","mmCIF",7,"—","—"],["1YJP.cif.gz","mmCIF",7,"—","—"],["1YJP_invalid.cif.gz","mmCIF",7,"—","—"],["1igt.pdb","PDB",1316,"NAG ×8, BMA ×2, MAN ×4, GAL ×2, FUL ×1, FUC ×1","—"],["3KPR.cif.gz","mmCIF",1652,"—","—"],["3KPR.pdb.gz","PDB",1652,"—","—"],["3PWP.cif.gz","mmCIF",829,"GOL ×7, SO4 ×1","—"],["3PWP.pdb.gz","PDB",829,"GOL ×7, SO4 ×1","—"],["5PTI.cif.gz","mmCIF",58,"PO4 ×1, UNX ×1","—"],["5digitResid.pdb","PDB",0,"—","—"],["7D9Z.pdb","PDB",424,"PCA ×1, EDO ×6, FLC ×1","—"],["7ETN.cif.gz","mmCIF",8,"—","—"],["adk_open.pdb","PDB",214,"—","HSD→HIS ×3"],["adk_open.pqr","PQR",214,"—","HSD→HIS ×3"],["adk_oplsaa.gro","GRO",214,"NA+ ×4","—"],["adk_oplsaa.pdb","PDB",214,"NA+ ×4","—"],["charmm_segid.pdb","PDB",424,"PCA ×1, EDO ×6, FLC ×1","HSD→HIS ×4"],["custom.cif.gz","mmCIF",71,"—","—"],["gmx_teste.pdb","PDB",425,"NA ×20, CL ×22","NALA→ALA ×1, CYS2→CYS ×10, LYSH→LYS ×23, HISE→HIS ×4, CGLU→GLU ×1, NGLN→GLN ×1, CSER→SER ×1"],["hybrid36.pdb","PDB",10050,"—","—"],["multimodel_warning.cif.gz","mmCIF",416,"VWW ×2, MES ×2","—"],["multimodelo.pdb","PDB",424,"PCA ×1, EDO ×6, FLC ×1","—"],["wrap.pdb","PDB",10050,"—","—"]];
+
+const UM = { ALA:"A", ARG:"R", ASN:"N", ASP:"D", CYS:"C", GLN:"Q", GLU:"E", GLY:"G", HIS:"H", ILE:"I",
+  LEU:"L", LYS:"K", MET:"M", PHE:"F", PRO:"P", SER:"S", THR:"T", TRP:"W", TYR:"Y", VAL:"V" };
+const CLASSES = [
+  ["apolar", "Apolar", "--c-apolar", ["ALA","VAL","LEU","ILE","MET"]],
+  ["arom", "Aromático", "--c-arom", ["PHE","TRP","TYR"]],
+  ["polar", "Polar", "--c-polar", ["SER","THR","ASN","GLN"]],
+  ["basico", "Básico", "--c-basico", ["LYS","ARG","HIS"]],
+  ["acido", "Ácido", "--c-acido", ["ASP","GLU"]],
+  ["especial", "Especial", "--c-especial", ["GLY","PRO","CYS"]]
+];
+const CLASSE_DE = {};
+CLASSES.forEach(([id, rot, cor, lista]) => lista.forEach(a => CLASSE_DE[a] = { rot, cor }));
+
+const $ = id => document.getElementById(id);
+let atual = null, ordem = "alfa";
+
+function deExemplo() {
+  return { arquivo: EXEMPLO.arquivo, formato: EXEMPLO.formato, contagem: EXEMPLO.contagem, total: EXEMPLO.total,
+    convertidos: new Map(EXEMPLO.convertidos), resumo: new Map(EXEMPLO.resumo), naoId: EXEMPLO.naoId };
+}
+
+function el(tag, props, filhos) {
+  const e = document.createElement(tag);
+  if (props) Object.entries(props).forEach(([k, v]) => { if (k === "style") e.style.cssText = v; else e[k] = v; });
+  (filhos || []).forEach(f => e.append(f));
+  return e;
+}
+
+function legenda() {
+  const box = $("legenda");
+  CLASSES.forEach(([id, rot, cor]) => box.append(el("span", {}, [el("i", { style: `background: var(${cor})` }), rot])));
+}
+
+function mostrar(r, exemplo) {
+  atual = r;
+  $("r-nome").textContent = r.arquivo;
+  $("r-fmt").textContent = r.formato;
+  $("r-ex").hidden = !exemplo;
+  $("r-exnota").hidden = !exemplo;
+  $("r-total").textContent = r.total.toLocaleString("pt-BR");
+  $("r-naoid").textContent = r.naoId.length.toLocaleString("pt-BR");
+  let nconv = 0; r.convertidos.forEach(v => nconv += v);
+  $("r-conv").textContent = nconv.toLocaleString("pt-BR");
+  tabela();
+
+  const cb = $("r-conv-lista"); cb.replaceChildren();
+  r.convertidos.forEach((v, k) => cb.append(el("span", { className: "chip" }, [k.replace("->", " → ") + " ", el("b", { textContent: "×" + v })])));
+  $("r-conv-bloco").hidden = r.convertidos.size === 0;
+
+  const rb = $("r-naoid-resumo"); rb.replaceChildren();
+  r.resumo.forEach((v, k) => rb.append(el("span", { className: "chip" }, [k + " ", el("b", { textContent: "×" + v })])));
+  $("r-naoid-nota").textContent = r.naoId.length ? "Fora do total: resíduos modificados, ligantes, íons, lipídios, açúcares etc." : "Nenhum. Todos os resíduos (exceto águas) são aminoácidos padrão.";
+  $("r-naoid-det").hidden = r.naoId.length === 0;
+  const lb = $("r-naoid-lista"); lb.replaceChildren();
+  const LIM = 2000;
+  r.naoId.slice(0, LIM).forEach(([c, n, nome]) => lb.append(el("tr", {}, [el("td", { textContent: nome }), el("td", { textContent: c || "-" }), el("td", { textContent: n })])));
+  $("r-naoid-corte").hidden = r.naoId.length <= LIM;
+  $("r-naoid-corte").textContent = `Mostrando os primeiros ${LIM.toLocaleString("pt-BR")} de ${r.naoId.length.toLocaleString("pt-BR")}. O relatório em .txt traz a lista completa.`;
+}
+
+function tabela() {
+  const r = atual, tb = $("r-linhas"); tb.replaceChildren();
+  let lista = AMINOACIDOS.slice();
+  if (ordem === "qtd") lista.sort((a, b) => r.contagem[b] - r.contagem[a] || a.localeCompare(b));
+  const max = Math.max(1, ...lista.map(a => r.contagem[a]));
+  lista.forEach(a => {
+    const q = r.contagem[a], cl = CLASSE_DE[a];
+    const pct = r.total ? (100 * q / r.total).toFixed(1).replace(".", ",") : "0,0";
+    tb.append(el("tr", {}, [
+      el("td", { className: "tres", textContent: a }),
+      el("td", { className: "um", textContent: UM[a] }),
+      el("td", { className: "col-classe", textContent: cl.rot, style: `color: var(${cl.cor})` }),
+      el("td", { className: "n", textContent: q.toLocaleString("pt-BR") }),
+      el("td", { className: "n", textContent: pct }),
+      el("td", { className: "barra" }, [el("div", { className: "trilho" }, [el("i", { style: `width:${(100 * q / max).toFixed(2)}%; background: var(${cl.cor})` })])])
+    ]));
+  });
+  tb.append(el("tr", { className: "total" }, [el("td", { textContent: "TOTAL" }), el("td", { className: "um" }), el("td", { className: "col-classe" }),
+    el("td", { className: "n", textContent: r.total.toLocaleString("pt-BR") }), el("td", { className: "n", textContent: r.total ? "100,0" : "0,0" }), el("td")]));
+}
+
+function csv(r) {
+  const linhas = ["residuo;uma_letra;classe;quantidade"];
+  AMINOACIDOS.forEach(a => linhas.push([a, UM[a], CLASSE_DE[a].rot, r.contagem[a]].join(";")));
+  linhas.push(["TOTAL", "", "", r.total].join(";"));
+  linhas.push("");
+  linhas.push("nao_identificado;cadeia;numero");
+  r.naoId.forEach(([c, n, nome]) => linhas.push([nome, c || "-", n].join(";")));
+  return linhas.join("\n") + "\n";
+}
+
+function aviso(id, msg) { const t = $(id); t.textContent = msg; clearTimeout(t._t); t._t = setTimeout(() => t.textContent = "", 4000); }
+
+async function copiar(texto, toastId) {
+  try { await navigator.clipboard.writeText(texto); aviso(toastId, "Copiado."); }
+  catch (e) {
+    const ta = el("textarea", { value: texto, style: "position:fixed;left:-9999px;top:0" });
+    document.body.append(ta); ta.select();
+    let ok = false; try { ok = document.execCommand("copy"); } catch (_) {}
+    ta.remove();
+    aviso(toastId, ok ? "Copiado." : "Não foi possível copiar. Selecione o texto e use Ctrl+C.");
+  }
+}
+
+let downloadsNs;
+const downloadsPromise = (window.claude && window.claude.use) ? window.claude.use("downloads").then(ns => downloadsNs = ns).catch(() => downloadsNs = null) : Promise.resolve(downloadsNs = null);
+
+async function salvar(nome, dados, toastId) {
+  await downloadsPromise;
+  if (downloadsNs) {
+    try { await downloadsNs.save({ filename: nome, data: dados }); aviso(toastId, "Arquivo salvo: " + nome); }
+    catch (e) {
+      const c = e && e.code;
+      if (c === "declined") aviso(toastId, "Download cancelado.");
+      else if (c === "rate_limited") aviso(toastId, "Já existe um download aguardando confirmação.");
+      else aviso(toastId, "Este visualizador não permite salvar arquivos. Use o botão Copiar.");
+    }
+    return;
+  }
+  // fora do Claude (pagina aberta localmente ou em outro site)
+  try {
+    const blob = dados instanceof Blob ? dados : new Blob([dados]);
+    const a = el("a", { href: URL.createObjectURL(blob), download: nome });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  } catch (e) { aviso(toastId, "Não foi possível salvar. Use o botão Copiar."); }
+}
+
+/* ---------- zip simples (sem compressao), para entregar os scripts com a extensao certa */
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function zip(arquivos) {
+  const enc = new TextEncoder(), partes = [], central = []; let pos = 0;
+  const d = new Date(), hora = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+  const data = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  arquivos.forEach(({ nome, texto }) => {
+    const n = enc.encode(nome), b = enc.encode(texto), crc = crc32(b);
+    const h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true);
+    h.setUint16(10, hora, true); h.setUint16(12, data, true); h.setUint32(14, crc, true);
+    h.setUint32(18, b.length, true); h.setUint32(22, b.length, true); h.setUint16(26, n.length, true); h.setUint16(28, 0, true);
+    partes.push(new Uint8Array(h.buffer), n, b);
+    const c = new DataView(new ArrayBuffer(46));
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 0x0314, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true);
+    c.setUint16(10, 0, true); c.setUint16(12, hora, true); c.setUint16(14, data, true); c.setUint32(16, crc, true);
+    c.setUint32(20, b.length, true); c.setUint32(24, b.length, true); c.setUint16(28, n.length, true);
+    c.setUint32(38, (nome.endsWith(".sh") ? 0o100755 : 0o100644) << 16, true); c.setUint32(42, pos, true);
+    central.push(new Uint8Array(c.buffer), n);
+    pos += 30 + n.length + b.length;
+  });
+  const tam = central.reduce((s, p) => s + p.length, 0);
+  const f = new DataView(new ArrayBuffer(22));
+  f.setUint32(0, 0x06054b50, true); f.setUint16(8, arquivos.length, true); f.setUint16(10, arquivos.length, true);
+  f.setUint32(12, tam, true); f.setUint32(16, pos, true);
+  return new Blob([...partes, ...central, new Uint8Array(f.buffer)], { type: "application/zip" });
+}
+
+/* ---------- leitura do arquivo enviado */
+async function lerArquivo(file) {
+  $("erro").hidden = true;
+  try {
+    let buf = new Uint8Array(await file.arrayBuffer());
+    if (buf[0] === 0x1f && buf[1] === 0x8b) {
+      if (typeof DecompressionStream === "undefined") throw new Error("Este navegador não descompacta .gz. Descompacte o arquivo antes de enviar.");
+      const s = new Blob([buf]).stream().pipeThrough(new DecompressionStream("gzip"));
+      buf = new Uint8Array(await new Response(s).arrayBuffer());
+    }
+    const texto = new TextDecoder("latin1").decode(buf);
+    const r = contarTexto(file.name, texto);
+    if (!r.nResiduos) throw new Error(`Nenhum átomo encontrado no arquivo (lido como ${r.formato}). Confira se é uma estrutura PDB, PQR, mmCIF ou GRO.`);
+    mostrar(r, false);
+    if (window.matchMedia("(max-width: 820px)").matches) $("resultado").scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (e) {
+    $("erro").textContent = e.message || "Não foi possível ler o arquivo.";
+    $("erro").hidden = false;
+  }
+}
+
+function prepararEntrada() {
+  const zona = $("soltar"), inp = $("arquivo");
+  inp.addEventListener("change", () => { if (inp.files[0]) lerArquivo(inp.files[0]); inp.value = ""; });
+  ["dragenter", "dragover"].forEach(ev => zona.addEventListener(ev, e => { e.preventDefault(); zona.classList.add("ativo"); }));
+  ["dragleave", "drop"].forEach(ev => zona.addEventListener(ev, e => { e.preventDefault(); zona.classList.remove("ativo"); }));
+  zona.addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if (f) lerArquivo(f); });
+  document.addEventListener("dragover", e => e.preventDefault());
+  document.addEventListener("drop", e => { e.preventDefault(); const f = e.dataTransfer && e.dataTransfer.files[0]; if (f && !zona.contains(e.target)) lerArquivo(f); });
+}
+
+function base(nome) { return nome.replace(/\.gz$/i, "").replace(/\.[^.]+$/, ""); }
+
+function prepararAcoes() {
+  $("b-copiar").onclick = () => copiar(relatorioTexto(atual), "toast");
+  $("b-txt").onclick = () => salvar(base(atual.arquivo) + "_contagem.txt", relatorioTexto(atual), "toast");
+  $("b-csv").onclick = () => salvar(base(atual.arquivo) + "_contagem.csv", "﻿" + csv(atual), "toast");
+  $("o-alfa").onclick = () => { ordem = "alfa"; $("o-alfa").setAttribute("aria-pressed", "true"); $("o-qtd").setAttribute("aria-pressed", "false"); tabela(); };
+  $("o-qtd").onclick = () => { ordem = "qtd"; $("o-qtd").setAttribute("aria-pressed", "true"); $("o-alfa").setAttribute("aria-pressed", "false"); tabela(); };
+}
+
+/* ---------- codigos-fonte */
+let abaAtual = 0;
+function prepararCodigos() {
+  const abas = $("abas");
+  FONTES.forEach((f, i) => {
+    const b = el("button", { type: "button", textContent: f.rotulo, id: "aba-" + i });
+    b.setAttribute("role", "tab");
+    b.onclick = () => abrirAba(i);
+    abas.append(b);
+  });
+  abrirAba(0);
+  $("c-copiar").onclick = () => copiar(FONTES[abaAtual].texto, "c-toast");
+  $("c-baixar").onclick = () => {
+    const f = FONTES[abaAtual];
+    if (downloadsNs) salvar(f.nome.replace(/\.[^.]+$/, "") + "_" + f.ext + ".zip", zip([{ nome: f.nome, texto: f.texto }]), "c-toast");
+    else salvar(f.nome, f.texto, "c-toast");
+  };
+  $("c-todos").onclick = () => salvar("contar_residuos.zip", zip(FONTES.map(f => ({ nome: f.nome, texto: f.texto }))), "c-toast");
+}
+function abrirAba(i) {
+  abaAtual = i;
+  FONTES.forEach((_, j) => $("aba-" + j).setAttribute("aria-selected", String(i === j)));
+  const f = FONTES[i];
+  $("c-desc").textContent = f.desc;
+  $("c-uso").textContent = f.uso;
+  $("c-baixar").textContent = "Baixar " + f.nome + (downloadsNs ? " (.zip)" : "");
+  const code = $("c-fonte");
+  code.className = "language-" + f.hl;
+  code.textContent = f.texto;
+  if (window.hljs) { try { code.innerHTML = window.hljs.highlight(f.texto, { language: f.hl, ignoreIllegals: true }).value; } catch (e) {} }
+}
+
+function prepararValidacao() {
+  const tb = $("v-linhas");
+  VALIDACAO.forEach(([f, fmt, tot, nao, conv]) => tb.append(el("tr", {}, [
+    el("td", {}, [el("code", { textContent: f })]), el("td", { textContent: fmt }),
+    el("td", { className: "n", textContent: tot.toLocaleString("pt-BR") }),
+    el("td", { className: "mono", textContent: nao }), el("td", { className: "mono", textContent: conv })
+  ])));
+}
+
+/* ---------- busca pelo codigo PDB no RCSB (fora do Claude) */
+const DENTRO_DO_CLAUDE = !!(window.claude && window.claude.use);
+function prepararBusca() {
+  if (DENTRO_DO_CLAUDE) return;            // o Claude bloqueia acesso a outros sites
+  const form = $("busca"), inp = $("codigo"), bt = $("b-buscar");
+  form.hidden = false;
+  form.addEventListener("submit", async e => {
+    e.preventDefault();
+    $("erro").hidden = true;
+    const id = inp.value.trim().toUpperCase();
+    if (!/^[0-9][A-Z0-9]{3}$/.test(id)) {
+      $("erro").textContent = "Digite um código PDB de 4 caracteres, começando por um número (ex.: 7D9Z).";
+      $("erro").hidden = false; return;
+    }
+    bt.disabled = true; bt.textContent = "Buscando…";
+    try {
+      let resp;
+      try { resp = await fetch("https://files.rcsb.org/download/" + id + ".cif"); }
+      catch (err) { throw new Error("Não foi possível acessar o RCSB. Verifique a conexão ou tente de novo em alguns minutos."); }
+      if (resp.status === 404) throw new Error("O código " + id + " não foi encontrado no PDB.");
+      if (!resp.ok) throw new Error("O RCSB respondeu com erro " + resp.status + ". Tente de novo em alguns minutos.");
+      const texto = await resp.text();
+      const r = contarTexto(id + ".cif", texto);
+      if (!r.nResiduos) throw new Error("O arquivo de " + id + " veio sem átomos.");
+      mostrar(r, false);
+      if (window.matchMedia("(max-width: 820px)").matches) $("resultado").scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (err) {
+      $("erro").textContent = err.message; $("erro").hidden = false;
+    } finally {
+      bt.disabled = false; bt.textContent = "Buscar";
+    }
+  });
+  // abre direto com ?pdb=XXXX no endereco
+  const q = new URLSearchParams(location.search).get("pdb");
+  if (q) { inp.value = q; form.requestSubmit(); }
+}
+
+legenda();
+mostrar(deExemplo(), true);
+prepararEntrada();
+prepararAcoes();
+prepararCodigos();
+prepararValidacao();
+prepararBusca();
+downloadsPromise.then(() => { $("c-nota-zip").hidden = !downloadsNs; abrirAba(abaAtual); });
+</script>
+</body>
+</html>
