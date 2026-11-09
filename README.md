@@ -4,7 +4,7 @@ Conta os aminoácidos de uma estrutura de proteína por tipo e lista o que não 
 
 **Página:** https://gabrielbadolato.github.io/contador-residuos/
 
-Na página você pode enviar um arquivo ou buscar uma estrutura pelo código PDB (ex.: `7D9Z`). Tudo roda no navegador; o arquivo não é enviado a nenhum servidor. Também dá para abrir direto uma estrutura pelo endereço: `https://gabrielbadolato.github.io/contador-residuos/?pdb=7D9Z`.
+Na página você pode enviar um arquivo ou buscar uma estrutura pelo código PDB (ex.: `7D9Z`). Na busca por código, a página também mostra as informações da estrutura vindas do RCSB PDB: título, método, resolução, datas, moléculas e organismos, quantos resíduos da sequência têm coordenadas e a publicação. Tudo roda no navegador; o arquivo não é enviado a nenhum servidor. Também dá para abrir direto uma estrutura pelo endereço: `https://gabrielbadolato.github.io/contador-residuos/?pdb=7D9Z`.
 
 ## Formatos aceitos
 
