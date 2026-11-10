@@ -231,6 +231,13 @@ section.info { margin-top: 20px; padding: 20px; display: flex; flex-direction: c
 .citacao { margin: 0; max-width: 80ch; line-height: 1.5; }
 .citacao em { font-style: italic; }
 .rot { font-size: 0.72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.exibir { display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--surface-2); border-radius: var(--r); }
+.exibir-cab { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+.exibir .alternar button { background: var(--surface); }
+.exibir .alternar button[aria-pressed="true"] { background: var(--accent-soft); }
+.exibir .btn:not(.prim) { background: var(--surface); }
+.exibir textarea { width: 100%; min-height: 220px; resize: vertical; font-family: var(--f-mono); font-size: 0.8rem; line-height: 1.5; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r); background: var(--code-bg); color: var(--ink); tab-size: 4; }
+.exibir .nota { margin: 0; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -291,6 +298,7 @@ section.info { margin-top: 20px; padding: 20px; display: flex; flex-direction: c
         <button class="btn" id="b-copiar" type="button">Copiar relatório</button>
         <button class="btn" id="b-txt" type="button">Salvar .txt</button>
         <button class="btn" id="b-csv" type="button">Salvar .csv</button>
+        <button class="btn" id="b-ver" type="button" aria-expanded="false" aria-controls="exibir">Mostrar para copiar</button>
       </div>
     </div>
     <p class="aviso" id="r-exnota">Resultado de exemplo para o Fab anti-basigina (PDB 7D9Z). Envie um arquivo para contar o seu.</p>
@@ -326,6 +334,21 @@ section.info { margin-top: 20px; padding: 20px; display: flex; flex-direction: c
         <div class="lista-caixa"><table class="tabela-lista"><thead><tr><th>Nome</th><th>Cadeia</th><th>Número</th></tr></thead><tbody id="r-naoid-lista"></tbody></table></div>
         <p class="nota" id="r-naoid-corte" hidden></p>
       </details>
+    </div>
+    <div class="exibir" id="exibir" hidden>
+      <div class="exibir-cab">
+        <div class="alternar" role="group" aria-label="Formato do conteúdo">
+          <button type="button" id="x-txt" aria-pressed="true">.txt</button>
+          <button type="button" id="x-csv" aria-pressed="false">.csv</button>
+        </div>
+        <div class="acoes">
+          <button class="btn prim" id="x-copiar" type="button">Copiar</button>
+          <button class="btn" id="x-selec" type="button">Selecionar tudo</button>
+          <button class="btn" id="x-fechar" type="button">Fechar</button>
+        </div>
+      </div>
+      <textarea id="x-texto" readonly spellcheck="false" wrap="off" rows="14" aria-label="Conteúdo do relatório"></textarea>
+      <p class="nota" id="x-nota"></p>
     </div>
     <div class="toast" id="toast" role="status"></div>
   </div>
@@ -1103,7 +1126,38 @@ function prepararBusca() {
   if (q) { inp.value = q; form.requestSubmit(); }
 }
 
+/* ---------- mostrar .txt / .csv na tela para copiar */
+let formatoExibir = "txt";
+function conteudoExibir() { return formatoExibir === "txt" ? relatorioTexto(atual) : csv(atual); }
+function atualizarExibir() {
+  $("x-texto").value = conteudoExibir();
+  $("x-txt").setAttribute("aria-pressed", String(formatoExibir === "txt"));
+  $("x-csv").setAttribute("aria-pressed", String(formatoExibir === "csv"));
+  $("x-nota").textContent = formatoExibir === "txt"
+    ? "Mesmo conteúdo do arquivo .txt. Se o botão Copiar não funcionar, use Selecionar tudo e depois Ctrl+C (no celular, toque e segure sobre o texto)."
+    : "Mesmo conteúdo do arquivo .csv, separado por ponto e vírgula. Colado no Excel ou no LibreOffice em português, cada valor vai para uma coluna.";
+}
+function prepararExibir() {
+  const painel = $("exibir"), bt = $("b-ver");
+  bt.onclick = () => {
+    const abrir = painel.hidden;
+    painel.hidden = !abrir;
+    bt.setAttribute("aria-expanded", String(abrir));
+    bt.textContent = abrir ? "Ocultar texto" : "Mostrar para copiar";
+    if (abrir) { atualizarExibir(); painel.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+  };
+  $("x-txt").onclick = () => { formatoExibir = "txt"; atualizarExibir(); };
+  $("x-csv").onclick = () => { formatoExibir = "csv"; atualizarExibir(); };
+  $("x-copiar").onclick = () => copiar($("x-texto").value, "toast");
+  $("x-selec").onclick = () => { const t = $("x-texto"); t.focus(); t.select(); t.setSelectionRange(0, t.value.length); };
+  $("x-fechar").onclick = () => { if (!painel.hidden) bt.click(); };
+}
+// ao contar outro arquivo, o texto mostrado acompanha
+const _mostrarSemExibir = mostrar;
+mostrar = function (r, exemplo) { _mostrarSemExibir(r, exemplo); if (!$("exibir").hidden) atualizarExibir(); };
+
 legenda();
+prepararExibir();
 mostrar(deExemplo(), true);
 prepararEntrada();
 prepararAcoes();
